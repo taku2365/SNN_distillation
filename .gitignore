@@ -1,0 +1,3 @@
+cifar_data/
+trained_models/
+self_models/__pycache__

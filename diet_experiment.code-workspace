@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../DNN_test/pytorch-cifar"
+		}
+	],
+	"settings": {}
+}

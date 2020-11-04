@@ -1,0 +1,432 @@
+
+ Run on time: 2020-05-21 17:56:37.284641
+
+ Arguments: 
+	 gpu                  : True
+	 seed                 : 0
+	 dataset              : CIFAR100
+	 batch_size           : 64
+	 architecture         : VGG16
+	 learning_rate        : 0.0001
+	 pretrained_ann       : ./trained_models/ann/ann_vgg16_cifar100.pth
+	 pretrained_snn       : 
+	 test_only            : False
+	 log                  : True
+	 epochs               : 100
+	 lr_interval          : [60, 80, 90]
+	 lr_reduce            : 5
+	 timesteps            : 20
+	 leak                 : 1.0
+	 scaling_factor       : 0.6
+	 default_threshold    : 1.0
+	 activation           : Linear
+	 alpha                : 0.3
+	 beta                 : 0.01
+	 optimizer            : Adam
+	 weight_decay         : 0.0
+	 momentum             : 0.9
+	 amsgrad              : True
+	 betas                : 0.9,0.999
+	 dropout              : 0.1
+	 kernel_size          : 3
+	 test_acc_every_batch : False
+	 train_acc_batches    : 500
+	 devices              : 1
+	 resume               : 
+ Missing keys : ['module.threshold.t0', 'module.threshold.t12', 'module.threshold.t15', 'module.threshold.t18', 'module.threshold.t21', 'module.threshold.t24', 'module.threshold.t27', 'module.threshold.t3', 'module.threshold.t30', 'module.threshold.t33', 'module.threshold.t36', 'module.threshold.t39', 'module.threshold.t42', 'module.threshold.t6', 'module.threshold.t9', 'module.leak.l0', 'module.leak.l12', 'module.leak.l15', 'module.leak.l18', 'module.leak.l21', 'module.leak.l24', 'module.leak.l27', 'module.leak.l3', 'module.leak.l30', 'module.leak.l33', 'module.leak.l36', 'module.leak.l39', 'module.leak.l42', 'module.leak.l6', 'module.leak.l9'], Unexpected Keys: []
+ Info: Accuracy of loaded ANN model: 0.7182
+ Info: Thresholds loaded from trained ANN: [1.5265676975250244, 2.3770864009857178, 0.5458261370658875, 1.2212934494018555, 0.38306117057800293, 0.8224923014640808, 0.4925486147403717, 0.16675657033920288, 0.5898769497871399, 1.7063789367675781, 1.301668643951416, 2.4691643714904785, 2.520913600921631, 1.2273887395858765, 1.560093879699707]
+ DataParallel(
+  (module): VGG_SNN(
+    (features): Sequential(
+      (0): Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (1): ReLU(inplace=True)
+      (2): Dropout(p=0.1, inplace=False)
+      (3): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (4): ReLU(inplace=True)
+      (5): AvgPool2d(kernel_size=2, stride=2, padding=0)
+      (6): Conv2d(64, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (7): ReLU(inplace=True)
+      (8): Dropout(p=0.1, inplace=False)
+      (9): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (10): ReLU(inplace=True)
+      (11): AvgPool2d(kernel_size=2, stride=2, padding=0)
+      (12): Conv2d(128, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (13): ReLU(inplace=True)
+      (14): Dropout(p=0.1, inplace=False)
+      (15): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (16): ReLU(inplace=True)
+      (17): Dropout(p=0.1, inplace=False)
+      (18): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (19): ReLU(inplace=True)
+      (20): AvgPool2d(kernel_size=2, stride=2, padding=0)
+      (21): Conv2d(256, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (22): ReLU(inplace=True)
+      (23): Dropout(p=0.1, inplace=False)
+      (24): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (25): ReLU(inplace=True)
+      (26): Dropout(p=0.1, inplace=False)
+      (27): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (28): ReLU(inplace=True)
+      (29): AvgPool2d(kernel_size=2, stride=2, padding=0)
+      (30): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (31): ReLU(inplace=True)
+      (32): Dropout(p=0.1, inplace=False)
+      (33): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (34): ReLU(inplace=True)
+      (35): Dropout(p=0.1, inplace=False)
+      (36): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+      (37): ReLU(inplace=True)
+      (38): Dropout(p=0.1, inplace=False)
+    )
+    (classifier): Sequential(
+      (0): Linear(in_features=2048, out_features=4096, bias=False)
+      (1): ReLU(inplace=True)
+      (2): Dropout(p=0.1, inplace=False)
+      (3): Linear(in_features=4096, out_features=4096, bias=False)
+      (4): ReLU(inplace=True)
+      (5): Dropout(p=0.1, inplace=False)
+      (6): Linear(in_features=4096, out_features=100, bias=False)
+    )
+    (threshold): ParameterDict(
+        (t0): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+        (t12): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+        (t15): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+        (t18): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+        (t21): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+        (t24): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+        (t27): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+        (t3): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+        (t30): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+        (t33): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+        (t36): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+        (t39): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+        (t42): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+        (t6): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+        (t9): Parameter containing: [torch.cuda.FloatTensor of size  (GPU 0)]
+    )
+    (leak): ParameterDict(
+        (l0): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+        (l12): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+        (l15): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+        (l18): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+        (l21): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+        (l24): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+        (l27): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+        (l3): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+        (l30): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+        (l33): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+        (l36): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+        (l39): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+        (l42): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+        (l6): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+        (l9): Parameter containing: [torch.cuda.FloatTensor of size 1 (GPU 0)]
+    )
+  )
+)
+ Adam (
+Parameter Group 0
+    amsgrad: True
+    betas: (0.9, 0.999)
+    eps: 1e-08
+    lr: 0.0001
+    weight_decay: 0.0
+)
+
+Epoch: 1, batch: 500, train_loss: 1.3177, train_acc: 0.6862, threshold: [0.88, 1.43, 0.35, 0.76, 0.25, 0.52, 0.32, 0.11, 0.35, 1.02, 0.77, 1.47, 1.5, 0.73, 0.94], leak: [1.0, 0.99, 0.97, 0.97, 0.97, 0.96, 0.97, 0.98, 0.98, 0.99, 0.98, 0.98, 0.98, 0.99, 0.99], timesteps: 20, time: 0:30:56
+Epoch: 1, lr: 1.0e-04, train_loss: 1.1765, train_acc: 0.7155 test_loss: 2.1246, test_acc: 0.5516, best: 0.5516 time: 0:54:56
+
+Epoch: 2, batch: 500, train_loss: 0.7543, train_acc: 0.8110, threshold: [0.83, 1.42, 0.37, 0.78, 0.27, 0.54, 0.34, 0.11, 0.35, 1.01, 0.75, 1.46, 1.5, 0.73, 0.94], leak: [1.0, 0.99, 0.95, 0.94, 0.94, 0.92, 0.93, 0.96, 0.95, 0.98, 0.95, 0.96, 0.95, 0.97, 0.97], timesteps: 20, time: 0:28:51
+Epoch: 2, lr: 1.0e-04, train_loss: 0.7365, train_acc: 0.8146 test_loss: 2.0309, test_acc: 0.5647, best: 0.5647 time: 0:54:14
+
+Epoch: 3, batch: 500, train_loss: 0.6111, train_acc: 0.8420, threshold: [0.79, 1.41, 0.38, 0.8, 0.28, 0.55, 0.36, 0.11, 0.34, 1.0, 0.75, 1.46, 1.49, 0.73, 0.95], leak: [1.0, 0.98, 0.94, 0.91, 0.92, 0.9, 0.9, 0.94, 0.93, 0.96, 0.93, 0.92, 0.91, 0.93, 0.94], timesteps: 20, time: 0:30:45
+Epoch: 3, lr: 1.0e-04, train_loss: 0.6089, train_acc: 0.8429 test_loss: 1.9549, test_acc: 0.5852, best: 0.5852 time: 0:53:31
+
+Epoch: 4, batch: 500, train_loss: 0.5493, train_acc: 0.8600, threshold: [0.76, 1.41, 0.38, 0.81, 0.28, 0.56, 0.37, 0.11, 0.33, 1.0, 0.74, 1.46, 1.5, 0.73, 0.95], leak: [1.0, 0.97, 0.93, 0.9, 0.91, 0.88, 0.88, 0.93, 0.92, 0.95, 0.91, 0.88, 0.87, 0.89, 0.9], timesteps: 20, time: 0:29:25
+Epoch: 4, lr: 1.0e-04, train_loss: 0.5427, train_acc: 0.8605 test_loss: 1.9910, test_acc: 0.6094, best: 0.6094 time: 0:34:43
+
+Epoch: 5, batch: 500, train_loss: 0.4915, train_acc: 0.8716, threshold: [0.73, 1.41, 0.38, 0.82, 0.29, 0.57, 0.39, 0.12, 0.33, 1.0, 0.74, 1.46, 1.5, 0.74, 0.95], leak: [1.0, 0.96, 0.92, 0.89, 0.9, 0.87, 0.86, 0.93, 0.91, 0.94, 0.89, 0.84, 0.83, 0.85, 0.87], timesteps: 20, time: 0:06:45
+Epoch: 5, lr: 1.0e-04, train_loss: 0.4959, train_acc: 0.8707 test_loss: 1.8734, test_acc: 0.6178, best: 0.6178 time: 0:12:06
+
+Epoch: 6, batch: 500, train_loss: 0.4642, train_acc: 0.8786, threshold: [0.7, 1.41, 0.38, 0.82, 0.29, 0.57, 0.4, 0.12, 0.33, 1.0, 0.74, 1.46, 1.5, 0.74, 0.96], leak: [1.0, 0.95, 0.92, 0.88, 0.9, 0.86, 0.85, 0.92, 0.9, 0.94, 0.87, 0.8, 0.79, 0.81, 0.83], timesteps: 20, time: 0:06:47
+Epoch: 6, lr: 1.0e-04, train_loss: 0.4585, train_acc: 0.8799 test_loss: 1.9380, test_acc: 0.6221, best: 0.6221 time: 0:12:09
+
+Epoch: 7, batch: 500, train_loss: 0.4205, train_acc: 0.8888, threshold: [0.68, 1.41, 0.38, 0.83, 0.29, 0.57, 0.4, 0.11, 0.32, 1.0, 0.75, 1.47, 1.51, 0.75, 0.96], leak: [1.0, 0.95, 0.91, 0.87, 0.89, 0.86, 0.85, 0.92, 0.89, 0.93, 0.84, 0.76, 0.75, 0.78, 0.79], timesteps: 20, time: 0:06:45
+Epoch: 7, lr: 1.0e-04, train_loss: 0.4258, train_acc: 0.8876 test_loss: 1.8313, test_acc: 0.6222, best: 0.6222 time: 0:12:07
+
+Epoch: 8, batch: 500, train_loss: 0.3973, train_acc: 0.8930, threshold: [0.66, 1.41, 0.38, 0.83, 0.29, 0.58, 0.41, 0.12, 0.32, 1.01, 0.75, 1.47, 1.51, 0.75, 0.96], leak: [1.0, 0.94, 0.91, 0.86, 0.89, 0.86, 0.84, 0.92, 0.88, 0.92, 0.82, 0.73, 0.72, 0.75, 0.77], timesteps: 20, time: 0:06:46
+Epoch: 8, lr: 1.0e-04, train_loss: 0.4022, train_acc: 0.8918 test_loss: 1.8796, test_acc: 0.6347, best: 0.6347 time: 0:12:08
+
+Epoch: 9, batch: 500, train_loss: 0.3789, train_acc: 0.8975, threshold: [0.64, 1.41, 0.38, 0.84, 0.29, 0.58, 0.41, 0.12, 0.32, 1.01, 0.75, 1.47, 1.51, 0.75, 0.97], leak: [1.0, 0.93, 0.91, 0.86, 0.89, 0.86, 0.83, 0.92, 0.88, 0.91, 0.8, 0.7, 0.7, 0.72, 0.74], timesteps: 20, time: 0:06:47
+Epoch: 9, lr: 1.0e-04, train_loss: 0.3877, train_acc: 0.8947 test_loss: 1.9013, test_acc: 0.6398, best: 0.6398 time: 0:12:07
+
+Epoch: 10, batch: 500, train_loss: 0.3638, train_acc: 0.9017, threshold: [0.63, 1.41, 0.38, 0.84, 0.29, 0.59, 0.42, 0.12, 0.32, 1.01, 0.76, 1.48, 1.52, 0.76, 0.97], leak: [1.0, 0.93, 0.91, 0.85, 0.89, 0.86, 0.83, 0.92, 0.87, 0.91, 0.78, 0.68, 0.67, 0.7, 0.71], timesteps: 20, time: 0:06:47
+Epoch: 10, lr: 1.0e-04, train_loss: 0.3686, train_acc: 0.9000 test_loss: 1.8334, test_acc: 0.6337, best: 0.6398 time: 0:12:03
+
+Epoch: 11, batch: 500, train_loss: 0.3438, train_acc: 0.9056, threshold: [0.61, 1.41, 0.38, 0.85, 0.29, 0.58, 0.42, 0.12, 0.32, 1.01, 0.76, 1.48, 1.52, 0.76, 0.97], leak: [1.0, 0.92, 0.91, 0.85, 0.88, 0.86, 0.83, 0.92, 0.87, 0.9, 0.76, 0.65, 0.64, 0.67, 0.68], timesteps: 20, time: 0:06:46
+Epoch: 11, lr: 1.0e-04, train_loss: 0.3515, train_acc: 0.9030 test_loss: 1.8801, test_acc: 0.6304, best: 0.6398 time: 0:12:01
+
+Epoch: 12, batch: 500, train_loss: 0.3283, train_acc: 0.9087, threshold: [0.61, 1.41, 0.38, 0.85, 0.29, 0.59, 0.43, 0.12, 0.32, 1.02, 0.76, 1.48, 1.53, 0.77, 0.98], leak: [1.0, 0.92, 0.91, 0.85, 0.88, 0.86, 0.82, 0.92, 0.87, 0.89, 0.74, 0.63, 0.62, 0.65, 0.66], timesteps: 20, time: 0:06:46
+Epoch: 12, lr: 1.0e-04, train_loss: 0.3332, train_acc: 0.9076 test_loss: 1.8734, test_acc: 0.6432, best: 0.6432 time: 0:12:07
+
+Epoch: 13, batch: 500, train_loss: 0.3296, train_acc: 0.9080, threshold: [0.6, 1.41, 0.38, 0.86, 0.29, 0.59, 0.44, 0.12, 0.32, 1.02, 0.76, 1.49, 1.53, 0.77, 0.98], leak: [1.0, 0.91, 0.9, 0.84, 0.88, 0.86, 0.82, 0.92, 0.87, 0.89, 0.73, 0.61, 0.6, 0.63, 0.63], timesteps: 20, time: 0:06:45
+Epoch: 13, lr: 1.0e-04, train_loss: 0.3307, train_acc: 0.9081 test_loss: 1.8694, test_acc: 0.6426, best: 0.6432 time: 0:12:00
+
+Epoch: 14, batch: 500, train_loss: 0.3147, train_acc: 0.9133, threshold: [0.59, 1.41, 0.38, 0.86, 0.29, 0.59, 0.44, 0.12, 0.32, 1.02, 0.77, 1.49, 1.53, 0.77, 0.98], leak: [1.0, 0.9, 0.9, 0.84, 0.88, 0.86, 0.82, 0.92, 0.86, 0.88, 0.72, 0.59, 0.59, 0.62, 0.61], timesteps: 20, time: 0:06:46
+Epoch: 14, lr: 1.0e-04, train_loss: 0.3148, train_acc: 0.9121 test_loss: 1.8667, test_acc: 0.6401, best: 0.6432 time: 0:12:01
+
+Epoch: 15, batch: 500, train_loss: 0.3034, train_acc: 0.9154, threshold: [0.58, 1.42, 0.38, 0.86, 0.29, 0.59, 0.44, 0.12, 0.32, 1.02, 0.77, 1.5, 1.54, 0.78, 0.98], leak: [1.0, 0.9, 0.9, 0.84, 0.87, 0.86, 0.82, 0.93, 0.86, 0.88, 0.7, 0.58, 0.57, 0.6, 0.59], timesteps: 20, time: 0:06:44
+Epoch: 15, lr: 1.0e-04, train_loss: 0.3064, train_acc: 0.9142 test_loss: 1.8615, test_acc: 0.6400, best: 0.6432 time: 0:11:59
+
+Epoch: 16, batch: 500, train_loss: 0.2910, train_acc: 0.9180, threshold: [0.58, 1.42, 0.38, 0.87, 0.29, 0.59, 0.45, 0.12, 0.32, 1.03, 0.77, 1.5, 1.54, 0.78, 0.99], leak: [1.0, 0.89, 0.9, 0.83, 0.87, 0.86, 0.82, 0.93, 0.86, 0.87, 0.7, 0.57, 0.56, 0.59, 0.57], timesteps: 20, time: 0:06:45
+Epoch: 16, lr: 1.0e-04, train_loss: 0.2942, train_acc: 0.9174 test_loss: 1.8749, test_acc: 0.6341, best: 0.6432 time: 0:11:59
+
+Epoch: 17, batch: 500, train_loss: 0.2987, train_acc: 0.9171, threshold: [0.57, 1.42, 0.37, 0.87, 0.29, 0.59, 0.45, 0.12, 0.32, 1.03, 0.78, 1.5, 1.54, 0.78, 0.99], leak: [1.0, 0.88, 0.9, 0.83, 0.87, 0.86, 0.82, 0.93, 0.86, 0.87, 0.68, 0.55, 0.54, 0.57, 0.55], timesteps: 20, time: 0:06:46
+Epoch: 17, lr: 1.0e-04, train_loss: 0.3040, train_acc: 0.9160 test_loss: 1.8819, test_acc: 0.6420, best: 0.6432 time: 0:12:01
+
+Epoch: 18, batch: 500, train_loss: 0.2809, train_acc: 0.9203, threshold: [0.56, 1.42, 0.37, 0.87, 0.29, 0.6, 0.45, 0.12, 0.32, 1.03, 0.78, 1.51, 1.55, 0.79, 0.99], leak: [1.0, 0.88, 0.9, 0.83, 0.87, 0.86, 0.82, 0.93, 0.86, 0.86, 0.68, 0.54, 0.53, 0.56, 0.53], timesteps: 20, time: 0:06:46
+Epoch: 18, lr: 1.0e-04, train_loss: 0.2826, train_acc: 0.9199 test_loss: 1.8537, test_acc: 0.6489, best: 0.6489 time: 0:12:07
+
+Epoch: 19, batch: 500, train_loss: 0.2715, train_acc: 0.9245, threshold: [0.56, 1.42, 0.37, 0.87, 0.29, 0.59, 0.46, 0.12, 0.33, 1.03, 0.78, 1.51, 1.55, 0.79, 0.99], leak: [1.0, 0.87, 0.9, 0.83, 0.87, 0.87, 0.82, 0.94, 0.86, 0.86, 0.66, 0.52, 0.52, 0.54, 0.51], timesteps: 20, time: 0:06:46
+Epoch: 19, lr: 1.0e-04, train_loss: 0.2747, train_acc: 0.9225 test_loss: 1.8962, test_acc: 0.6465, best: 0.6489 time: 0:12:01
+
+Epoch: 20, batch: 500, train_loss: 0.2548, train_acc: 0.9285, threshold: [0.55, 1.42, 0.37, 0.88, 0.29, 0.6, 0.46, 0.12, 0.32, 1.04, 0.79, 1.52, 1.55, 0.79, 1.0], leak: [1.0, 0.87, 0.9, 0.83, 0.87, 0.87, 0.83, 0.94, 0.86, 0.86, 0.66, 0.51, 0.51, 0.53, 0.5], timesteps: 20, time: 0:06:47
+Epoch: 20, lr: 1.0e-04, train_loss: 0.2661, train_acc: 0.9251 test_loss: 1.8821, test_acc: 0.6427, best: 0.6489 time: 0:12:02
+
+Epoch: 21, batch: 500, train_loss: 0.2626, train_acc: 0.9251, threshold: [0.55, 1.42, 0.37, 0.88, 0.29, 0.6, 0.46, 0.12, 0.33, 1.04, 0.79, 1.52, 1.56, 0.79, 1.0], leak: [1.0, 0.86, 0.9, 0.82, 0.86, 0.87, 0.83, 0.94, 0.86, 0.85, 0.65, 0.5, 0.5, 0.52, 0.48], timesteps: 20, time: 0:06:45
+Epoch: 21, lr: 1.0e-04, train_loss: 0.2687, train_acc: 0.9248 test_loss: 1.8642, test_acc: 0.6603, best: 0.6603 time: 0:12:07
+
+Epoch: 22, batch: 500, train_loss: 0.2498, train_acc: 0.9295, threshold: [0.55, 1.42, 0.36, 0.88, 0.29, 0.6, 0.47, 0.12, 0.32, 1.04, 0.79, 1.52, 1.56, 0.8, 1.0], leak: [1.0, 0.86, 0.9, 0.82, 0.86, 0.87, 0.83, 0.94, 0.86, 0.85, 0.65, 0.5, 0.49, 0.52, 0.46], timesteps: 20, time: 0:06:45
+Epoch: 22, lr: 1.0e-04, train_loss: 0.2545, train_acc: 0.9286 test_loss: 1.9047, test_acc: 0.6504, best: 0.6603 time: 0:12:00
+
+Epoch: 23, batch: 500, train_loss: 0.2496, train_acc: 0.9316, threshold: [0.54, 1.42, 0.36, 0.89, 0.29, 0.6, 0.47, 0.12, 0.32, 1.04, 0.79, 1.52, 1.56, 0.8, 1.01], leak: [1.0, 0.86, 0.9, 0.82, 0.86, 0.87, 0.83, 0.94, 0.86, 0.85, 0.65, 0.49, 0.48, 0.51, 0.45], timesteps: 20, time: 0:06:46
+Epoch: 23, lr: 1.0e-04, train_loss: 0.2596, train_acc: 0.9283 test_loss: 1.9353, test_acc: 0.6569, best: 0.6603 time: 0:12:01
+
+Epoch: 24, batch: 500, train_loss: 0.2532, train_acc: 0.9286, threshold: [0.54, 1.42, 0.36, 0.89, 0.29, 0.6, 0.47, 0.12, 0.33, 1.04, 0.8, 1.53, 1.57, 0.8, 1.01], leak: [1.0, 0.85, 0.89, 0.81, 0.86, 0.87, 0.83, 0.95, 0.86, 0.85, 0.64, 0.48, 0.47, 0.5, 0.43], timesteps: 20, time: 0:06:45
+Epoch: 24, lr: 1.0e-04, train_loss: 0.2522, train_acc: 0.9288 test_loss: 1.9362, test_acc: 0.6480, best: 0.6603 time: 0:12:01
+
+Epoch: 25, batch: 500, train_loss: 0.2343, train_acc: 0.9343, threshold: [0.54, 1.42, 0.36, 0.89, 0.3, 0.6, 0.47, 0.12, 0.33, 1.05, 0.8, 1.53, 1.57, 0.8, 1.01], leak: [1.0, 0.85, 0.89, 0.81, 0.86, 0.87, 0.83, 0.95, 0.85, 0.85, 0.63, 0.47, 0.47, 0.49, 0.42], timesteps: 20, time: 0:06:46
+Epoch: 25, lr: 1.0e-04, train_loss: 0.2392, train_acc: 0.9337 test_loss: 1.9540, test_acc: 0.6545, best: 0.6603 time: 0:12:01
+
+Epoch: 26, batch: 500, train_loss: 0.2304, train_acc: 0.9363, threshold: [0.53, 1.42, 0.36, 0.9, 0.29, 0.6, 0.48, 0.12, 0.33, 1.05, 0.8, 1.53, 1.57, 0.81, 1.01], leak: [1.0, 0.84, 0.89, 0.81, 0.86, 0.87, 0.83, 0.95, 0.86, 0.85, 0.63, 0.47, 0.46, 0.49, 0.41], timesteps: 20, time: 0:06:45
+Epoch: 26, lr: 1.0e-04, train_loss: 0.2337, train_acc: 0.9355 test_loss: 1.9070, test_acc: 0.6569, best: 0.6603 time: 0:12:01
+
+Epoch: 27, batch: 500, train_loss: 0.2364, train_acc: 0.9334, threshold: [0.53, 1.42, 0.36, 0.9, 0.3, 0.61, 0.48, 0.12, 0.33, 1.05, 0.81, 1.54, 1.58, 0.81, 1.01], leak: [1.0, 0.84, 0.89, 0.81, 0.85, 0.87, 0.84, 0.95, 0.86, 0.85, 0.63, 0.46, 0.45, 0.48, 0.39], timesteps: 20, time: 0:06:48
+Epoch: 27, lr: 1.0e-04, train_loss: 0.2443, train_acc: 0.9309 test_loss: 1.8619, test_acc: 0.6536, best: 0.6603 time: 0:12:03
+
+Epoch: 28, batch: 500, train_loss: 0.2406, train_acc: 0.9323, threshold: [0.53, 1.42, 0.36, 0.9, 0.29, 0.61, 0.48, 0.12, 0.33, 1.05, 0.81, 1.54, 1.58, 0.81, 1.02], leak: [1.0, 0.84, 0.89, 0.81, 0.85, 0.87, 0.84, 0.96, 0.86, 0.85, 0.62, 0.46, 0.45, 0.47, 0.38], timesteps: 20, time: 0:06:48
+Epoch: 28, lr: 1.0e-04, train_loss: 0.2456, train_acc: 0.9306 test_loss: 1.8822, test_acc: 0.6577, best: 0.6603 time: 0:12:03
+
+Epoch: 29, batch: 500, train_loss: 0.2333, train_acc: 0.9354, threshold: [0.53, 1.42, 0.35, 0.9, 0.29, 0.61, 0.48, 0.12, 0.33, 1.05, 0.81, 1.54, 1.58, 0.82, 1.02], leak: [1.0, 0.83, 0.88, 0.8, 0.85, 0.87, 0.84, 0.96, 0.86, 0.85, 0.62, 0.45, 0.44, 0.46, 0.36], timesteps: 20, time: 0:06:45
+Epoch: 29, lr: 1.0e-04, train_loss: 0.2364, train_acc: 0.9332 test_loss: 1.8486, test_acc: 0.6621, best: 0.6621 time: 0:12:08
+
+Epoch: 30, batch: 500, train_loss: 0.2264, train_acc: 0.9344, threshold: [0.52, 1.42, 0.35, 0.91, 0.3, 0.61, 0.49, 0.13, 0.33, 1.05, 0.82, 1.55, 1.59, 0.82, 1.02], leak: [1.0, 0.83, 0.88, 0.8, 0.85, 0.87, 0.84, 0.96, 0.86, 0.85, 0.62, 0.44, 0.43, 0.45, 0.35], timesteps: 20, time: 0:06:46
+Epoch: 30, lr: 1.0e-04, train_loss: 0.2310, train_acc: 0.9339 test_loss: 1.9567, test_acc: 0.6580, best: 0.6621 time: 0:12:01
+
+Epoch: 31, batch: 500, train_loss: 0.2280, train_acc: 0.9353, threshold: [0.52, 1.42, 0.35, 0.91, 0.3, 0.61, 0.49, 0.13, 0.32, 1.06, 0.82, 1.55, 1.59, 0.82, 1.03], leak: [1.0, 0.82, 0.88, 0.8, 0.85, 0.87, 0.84, 0.96, 0.86, 0.85, 0.62, 0.44, 0.43, 0.45, 0.34], timesteps: 20, time: 0:06:46
+Epoch: 31, lr: 1.0e-04, train_loss: 0.2361, train_acc: 0.9330 test_loss: 1.8480, test_acc: 0.6635, best: 0.6635 time: 0:12:09
+
+Epoch: 32, batch: 500, train_loss: 0.2256, train_acc: 0.9362, threshold: [0.52, 1.42, 0.35, 0.91, 0.3, 0.61, 0.49, 0.13, 0.33, 1.06, 0.82, 1.55, 1.59, 0.83, 1.03], leak: [1.0, 0.82, 0.88, 0.8, 0.85, 0.88, 0.85, 0.96, 0.86, 0.85, 0.61, 0.44, 0.42, 0.44, 0.33], timesteps: 20, time: 0:06:46
+Epoch: 32, lr: 1.0e-04, train_loss: 0.2265, train_acc: 0.9359 test_loss: 1.9447, test_acc: 0.6543, best: 0.6635 time: 0:12:02
+
+Epoch: 33, batch: 500, train_loss: 0.2119, train_acc: 0.9397, threshold: [0.52, 1.41, 0.35, 0.91, 0.3, 0.61, 0.49, 0.13, 0.32, 1.06, 0.82, 1.55, 1.59, 0.83, 1.03], leak: [1.0, 0.82, 0.88, 0.8, 0.85, 0.87, 0.85, 0.96, 0.86, 0.85, 0.61, 0.43, 0.42, 0.43, 0.32], timesteps: 20, time: 0:06:46
+Epoch: 33, lr: 1.0e-04, train_loss: 0.2177, train_acc: 0.9381 test_loss: 1.9605, test_acc: 0.6564, best: 0.6635 time: 0:12:02
+
+Epoch: 34, batch: 500, train_loss: 0.2142, train_acc: 0.9396, threshold: [0.52, 1.41, 0.35, 0.91, 0.3, 0.61, 0.49, 0.13, 0.32, 1.06, 0.82, 1.56, 1.6, 0.83, 1.03], leak: [1.0, 0.82, 0.87, 0.79, 0.85, 0.87, 0.85, 0.96, 0.86, 0.85, 0.61, 0.43, 0.42, 0.43, 0.31], timesteps: 20, time: 0:06:45
+Epoch: 34, lr: 1.0e-04, train_loss: 0.2155, train_acc: 0.9388 test_loss: 1.8579, test_acc: 0.6646, best: 0.6646 time: 0:12:08
+
+Epoch: 35, batch: 500, train_loss: 0.2085, train_acc: 0.9409, threshold: [0.52, 1.41, 0.34, 0.91, 0.3, 0.62, 0.5, 0.13, 0.32, 1.06, 0.83, 1.56, 1.6, 0.83, 1.03], leak: [1.0, 0.81, 0.87, 0.79, 0.85, 0.87, 0.85, 0.96, 0.86, 0.85, 0.61, 0.42, 0.41, 0.42, 0.3], timesteps: 20, time: 0:06:46
+Epoch: 35, lr: 1.0e-04, train_loss: 0.2153, train_acc: 0.9395 test_loss: 1.8408, test_acc: 0.6636, best: 0.6646 time: 0:12:02
+
+Epoch: 36, batch: 500, train_loss: 0.2044, train_acc: 0.9413, threshold: [0.51, 1.42, 0.34, 0.92, 0.3, 0.62, 0.5, 0.13, 0.32, 1.06, 0.83, 1.56, 1.6, 0.84, 1.04], leak: [1.0, 0.81, 0.87, 0.79, 0.85, 0.87, 0.85, 0.97, 0.86, 0.85, 0.61, 0.42, 0.41, 0.42, 0.29], timesteps: 20, time: 0:06:46
+Epoch: 36, lr: 1.0e-04, train_loss: 0.2094, train_acc: 0.9406 test_loss: 1.8403, test_acc: 0.6616, best: 0.6646 time: 0:12:02
+
+Epoch: 37, batch: 500, train_loss: 0.2068, train_acc: 0.9417, threshold: [0.51, 1.41, 0.34, 0.92, 0.3, 0.62, 0.5, 0.13, 0.32, 1.07, 0.83, 1.57, 1.61, 0.84, 1.04], leak: [1.0, 0.8, 0.87, 0.79, 0.85, 0.87, 0.85, 0.97, 0.86, 0.85, 0.6, 0.42, 0.4, 0.41, 0.27], timesteps: 20, time: 0:06:46
+Epoch: 37, lr: 1.0e-04, train_loss: 0.2111, train_acc: 0.9406 test_loss: 1.9060, test_acc: 0.6642, best: 0.6646 time: 0:12:02
+
+Epoch: 38, batch: 500, train_loss: 0.1995, train_acc: 0.9432, threshold: [0.51, 1.41, 0.34, 0.92, 0.3, 0.62, 0.51, 0.13, 0.32, 1.07, 0.83, 1.57, 1.61, 0.84, 1.04], leak: [1.0, 0.8, 0.87, 0.79, 0.84, 0.87, 0.85, 0.97, 0.87, 0.85, 0.6, 0.42, 0.4, 0.41, 0.27], timesteps: 20, time: 0:06:46
+Epoch: 38, lr: 1.0e-04, train_loss: 0.2015, train_acc: 0.9424 test_loss: 1.9077, test_acc: 0.6671, best: 0.6671 time: 0:12:09
+
+Epoch: 39, batch: 500, train_loss: 0.1995, train_acc: 0.9432, threshold: [0.51, 1.41, 0.34, 0.92, 0.3, 0.62, 0.51, 0.13, 0.32, 1.07, 0.84, 1.57, 1.61, 0.84, 1.04], leak: [1.0, 0.8, 0.86, 0.79, 0.84, 0.87, 0.85, 0.97, 0.86, 0.85, 0.6, 0.41, 0.39, 0.4, 0.26], timesteps: 20, time: 0:06:45
+Epoch: 39, lr: 1.0e-04, train_loss: 0.2047, train_acc: 0.9419 test_loss: 1.8910, test_acc: 0.6650, best: 0.6671 time: 0:12:01
+
+Epoch: 40, batch: 500, train_loss: 0.1902, train_acc: 0.9471, threshold: [0.5, 1.41, 0.34, 0.92, 0.3, 0.62, 0.51, 0.13, 0.33, 1.07, 0.84, 1.57, 1.61, 0.85, 1.04], leak: [1.0, 0.79, 0.86, 0.79, 0.84, 0.87, 0.85, 0.97, 0.86, 0.85, 0.59, 0.41, 0.39, 0.4, 0.25], timesteps: 20, time: 0:06:45
+Epoch: 40, lr: 1.0e-04, train_loss: 0.1912, train_acc: 0.9457 test_loss: 1.9674, test_acc: 0.6641, best: 0.6671 time: 0:12:01
+
+Epoch: 41, batch: 500, train_loss: 0.1989, train_acc: 0.9433, threshold: [0.5, 1.41, 0.34, 0.93, 0.3, 0.62, 0.51, 0.13, 0.33, 1.07, 0.84, 1.58, 1.62, 0.85, 1.05], leak: [1.0, 0.79, 0.86, 0.78, 0.84, 0.87, 0.86, 0.97, 0.86, 0.85, 0.59, 0.41, 0.39, 0.4, 0.25], timesteps: 20, time: 0:06:46
+Epoch: 41, lr: 1.0e-04, train_loss: 0.2021, train_acc: 0.9421 test_loss: 1.8707, test_acc: 0.6660, best: 0.6671 time: 0:12:02
+
+Epoch: 42, batch: 500, train_loss: 0.1835, train_acc: 0.9471, threshold: [0.51, 1.41, 0.33, 0.93, 0.3, 0.62, 0.51, 0.13, 0.33, 1.07, 0.84, 1.58, 1.62, 0.85, 1.05], leak: [1.0, 0.79, 0.86, 0.78, 0.84, 0.87, 0.86, 0.97, 0.86, 0.85, 0.59, 0.4, 0.38, 0.4, 0.24], timesteps: 20, time: 0:06:46
+Epoch: 42, lr: 1.0e-04, train_loss: 0.1861, train_acc: 0.9455 test_loss: 1.9442, test_acc: 0.6615, best: 0.6671 time: 0:12:01
+
+Epoch: 43, batch: 500, train_loss: 0.1761, train_acc: 0.9501, threshold: [0.51, 1.41, 0.33, 0.93, 0.3, 0.62, 0.52, 0.14, 0.33, 1.08, 0.84, 1.58, 1.62, 0.85, 1.05], leak: [1.0, 0.79, 0.86, 0.78, 0.84, 0.87, 0.86, 0.97, 0.86, 0.85, 0.59, 0.4, 0.38, 0.4, 0.24], timesteps: 20, time: 0:06:45
+Epoch: 43, lr: 1.0e-04, train_loss: 0.1831, train_acc: 0.9485 test_loss: 1.8932, test_acc: 0.6682, best: 0.6682 time: 0:12:08
+
+Epoch: 44, batch: 500, train_loss: 0.1834, train_acc: 0.9475, threshold: [0.5, 1.41, 0.33, 0.93, 0.3, 0.63, 0.52, 0.14, 0.33, 1.08, 0.85, 1.58, 1.62, 0.85, 1.05], leak: [1.0, 0.78, 0.86, 0.78, 0.84, 0.87, 0.86, 0.97, 0.86, 0.85, 0.59, 0.4, 0.38, 0.39, 0.23], timesteps: 20, time: 0:06:45
+Epoch: 44, lr: 1.0e-04, train_loss: 0.1893, train_acc: 0.9461 test_loss: 1.9181, test_acc: 0.6647, best: 0.6682 time: 0:12:01
+
+Epoch: 45, batch: 500, train_loss: 0.1645, train_acc: 0.9524, threshold: [0.5, 1.41, 0.33, 0.93, 0.3, 0.63, 0.52, 0.13, 0.33, 1.08, 0.85, 1.58, 1.63, 0.86, 1.05], leak: [1.0, 0.78, 0.86, 0.78, 0.84, 0.87, 0.86, 0.97, 0.86, 0.85, 0.59, 0.4, 0.38, 0.39, 0.23], timesteps: 20, time: 0:06:46
+Epoch: 45, lr: 1.0e-04, train_loss: 0.1723, train_acc: 0.9506 test_loss: 1.9093, test_acc: 0.6629, best: 0.6682 time: 0:12:02
+
+Epoch: 46, batch: 500, train_loss: 0.1860, train_acc: 0.9471, threshold: [0.5, 1.41, 0.33, 0.93, 0.31, 0.63, 0.52, 0.14, 0.33, 1.08, 0.85, 1.59, 1.63, 0.86, 1.06], leak: [1.0, 0.78, 0.85, 0.78, 0.84, 0.87, 0.86, 0.97, 0.86, 0.85, 0.59, 0.4, 0.38, 0.39, 0.22], timesteps: 20, time: 0:06:45
+Epoch: 46, lr: 1.0e-04, train_loss: 0.1861, train_acc: 0.9471 test_loss: 1.8911, test_acc: 0.6743, best: 0.6743 time: 0:12:08
+
+Epoch: 47, batch: 500, train_loss: 0.1853, train_acc: 0.9466, threshold: [0.5, 1.41, 0.33, 0.93, 0.31, 0.63, 0.52, 0.14, 0.32, 1.08, 0.85, 1.59, 1.63, 0.86, 1.06], leak: [1.0, 0.77, 0.85, 0.78, 0.84, 0.87, 0.86, 0.98, 0.87, 0.85, 0.59, 0.4, 0.38, 0.39, 0.22], timesteps: 20, time: 0:06:46
+Epoch: 47, lr: 1.0e-04, train_loss: 0.1843, train_acc: 0.9472 test_loss: 1.8870, test_acc: 0.6645, best: 0.6743 time: 0:12:02
+
+Epoch: 48, batch: 500, train_loss: 0.1739, train_acc: 0.9505, threshold: [0.5, 1.41, 0.33, 0.94, 0.31, 0.63, 0.53, 0.14, 0.32, 1.08, 0.85, 1.59, 1.63, 0.86, 1.06], leak: [1.0, 0.77, 0.85, 0.78, 0.84, 0.87, 0.87, 0.97, 0.86, 0.85, 0.59, 0.4, 0.37, 0.39, 0.21], timesteps: 20, time: 0:06:45
+Epoch: 48, lr: 1.0e-04, train_loss: 0.1787, train_acc: 0.9494 test_loss: 1.9478, test_acc: 0.6664, best: 0.6743 time: 0:12:01
+
+Epoch: 49, batch: 500, train_loss: 0.1709, train_acc: 0.9508, threshold: [0.5, 1.41, 0.32, 0.94, 0.31, 0.63, 0.53, 0.14, 0.32, 1.08, 0.85, 1.59, 1.64, 0.87, 1.06], leak: [1.0, 0.77, 0.85, 0.78, 0.84, 0.87, 0.87, 0.98, 0.87, 0.85, 0.59, 0.4, 0.37, 0.38, 0.2], timesteps: 20, time: 0:06:46
+Epoch: 49, lr: 1.0e-04, train_loss: 0.1782, train_acc: 0.9490 test_loss: 1.8826, test_acc: 0.6713, best: 0.6743 time: 0:12:02
+
+Epoch: 50, batch: 500, train_loss: 0.1712, train_acc: 0.9518, threshold: [0.49, 1.41, 0.32, 0.94, 0.31, 0.63, 0.53, 0.14, 0.32, 1.09, 0.86, 1.6, 1.64, 0.87, 1.06], leak: [1.0, 0.76, 0.85, 0.77, 0.84, 0.87, 0.87, 0.98, 0.86, 0.85, 0.58, 0.39, 0.37, 0.38, 0.2], timesteps: 20, time: 0:06:46
+Epoch: 50, lr: 1.0e-04, train_loss: 0.1734, train_acc: 0.9516 test_loss: 1.9002, test_acc: 0.6736, best: 0.6743 time: 0:12:02
+
+Epoch: 51, batch: 500, train_loss: 0.1698, train_acc: 0.9537, threshold: [0.49, 1.41, 0.32, 0.94, 0.31, 0.63, 0.54, 0.14, 0.33, 1.09, 0.86, 1.6, 1.64, 0.87, 1.07], leak: [1.0, 0.76, 0.85, 0.77, 0.84, 0.88, 0.87, 0.98, 0.86, 0.85, 0.58, 0.39, 0.37, 0.37, 0.19], timesteps: 20, time: 0:06:45
+Epoch: 51, lr: 1.0e-04, train_loss: 0.1725, train_acc: 0.9524 test_loss: 1.8631, test_acc: 0.6714, best: 0.6743 time: 0:12:01
+
+Epoch: 52, batch: 500, train_loss: 0.1529, train_acc: 0.9556, threshold: [0.49, 1.41, 0.32, 0.94, 0.31, 0.63, 0.54, 0.14, 0.33, 1.09, 0.86, 1.6, 1.64, 0.87, 1.07], leak: [1.0, 0.76, 0.85, 0.77, 0.84, 0.88, 0.87, 0.98, 0.86, 0.85, 0.58, 0.39, 0.37, 0.37, 0.19], timesteps: 20, time: 0:06:46
+Epoch: 52, lr: 1.0e-04, train_loss: 0.1589, train_acc: 0.9539 test_loss: 1.9697, test_acc: 0.6662, best: 0.6743 time: 0:12:02
+
+Epoch: 53, batch: 500, train_loss: 0.1650, train_acc: 0.9522, threshold: [0.49, 1.4, 0.32, 0.94, 0.31, 0.63, 0.54, 0.14, 0.33, 1.09, 0.86, 1.6, 1.64, 0.87, 1.07], leak: [1.0, 0.76, 0.84, 0.77, 0.84, 0.88, 0.87, 0.98, 0.86, 0.85, 0.58, 0.39, 0.36, 0.37, 0.18], timesteps: 20, time: 0:06:46
+Epoch: 53, lr: 1.0e-04, train_loss: 0.1700, train_acc: 0.9505 test_loss: 1.9617, test_acc: 0.6690, best: 0.6743 time: 0:12:02
+
+Epoch: 54, batch: 500, train_loss: 0.1698, train_acc: 0.9511, threshold: [0.49, 1.4, 0.32, 0.94, 0.31, 0.63, 0.54, 0.14, 0.33, 1.09, 0.86, 1.6, 1.65, 0.87, 1.07], leak: [1.0, 0.76, 0.84, 0.77, 0.84, 0.88, 0.87, 0.98, 0.86, 0.85, 0.58, 0.39, 0.36, 0.37, 0.18], timesteps: 20, time: 0:06:46
+Epoch: 54, lr: 1.0e-04, train_loss: 0.1734, train_acc: 0.9511 test_loss: 1.8786, test_acc: 0.6754, best: 0.6754 time: 0:12:09
+
+Epoch: 55, batch: 500, train_loss: 0.1575, train_acc: 0.9551, threshold: [0.49, 1.4, 0.32, 0.94, 0.31, 0.64, 0.55, 0.14, 0.33, 1.09, 0.86, 1.6, 1.65, 0.88, 1.07], leak: [1.0, 0.75, 0.84, 0.77, 0.84, 0.88, 0.87, 0.99, 0.87, 0.85, 0.58, 0.39, 0.36, 0.37, 0.17], timesteps: 20, time: 0:06:46
+Epoch: 55, lr: 1.0e-04, train_loss: 0.1637, train_acc: 0.9532 test_loss: 1.9343, test_acc: 0.6716, best: 0.6754 time: 0:12:02
+
+Epoch: 56, batch: 500, train_loss: 0.1551, train_acc: 0.9553, threshold: [0.49, 1.4, 0.32, 0.95, 0.31, 0.64, 0.55, 0.14, 0.33, 1.09, 0.87, 1.61, 1.65, 0.88, 1.08], leak: [1.0, 0.75, 0.84, 0.77, 0.84, 0.87, 0.86, 0.99, 0.87, 0.85, 0.58, 0.39, 0.36, 0.37, 0.17], timesteps: 20, time: 0:06:46
+Epoch: 56, lr: 1.0e-04, train_loss: 0.1582, train_acc: 0.9542 test_loss: 1.9114, test_acc: 0.6733, best: 0.6754 time: 0:12:02
+
+Epoch: 57, batch: 500, train_loss: 0.1524, train_acc: 0.9565, threshold: [0.49, 1.4, 0.32, 0.95, 0.31, 0.64, 0.55, 0.14, 0.33, 1.09, 0.87, 1.61, 1.65, 0.88, 1.08], leak: [1.0, 0.75, 0.84, 0.76, 0.84, 0.87, 0.87, 0.99, 0.87, 0.85, 0.57, 0.39, 0.36, 0.37, 0.16], timesteps: 20, time: 0:06:45
+Epoch: 57, lr: 1.0e-04, train_loss: 0.1532, train_acc: 0.9561 test_loss: 1.9986, test_acc: 0.6769, best: 0.6769 time: 0:12:08
+
+Epoch: 58, batch: 500, train_loss: 0.1579, train_acc: 0.9561, threshold: [0.49, 1.4, 0.32, 0.95, 0.31, 0.64, 0.55, 0.14, 0.33, 1.1, 0.87, 1.61, 1.65, 0.88, 1.08], leak: [1.0, 0.75, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.87, 0.84, 0.57, 0.39, 0.36, 0.36, 0.16], timesteps: 20, time: 0:06:45
+Epoch: 58, lr: 1.0e-04, train_loss: 0.1620, train_acc: 0.9547 test_loss: 1.8895, test_acc: 0.6731, best: 0.6769 time: 0:12:01
+
+Epoch: 59, batch: 500, train_loss: 0.1580, train_acc: 0.9543, threshold: [0.48, 1.4, 0.32, 0.95, 0.31, 0.64, 0.55, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.87, 0.85, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 59, lr: 1.0e-04, train_loss: 0.1593, train_acc: 0.9544 test_loss: 1.9445, test_acc: 0.6731, best: 0.6769 time: 0:12:02
+
+Epoch: 60, batch: 500, train_loss: 0.1043, train_acc: 0.9707, threshold: [0.48, 1.4, 0.32, 0.95, 0.31, 0.64, 0.55, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.87, 0.85, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 60, lr: 2.0e-05, train_loss: 0.1028, train_acc: 0.9707 test_loss: 1.9533, test_acc: 0.6803, best: 0.6803 time: 0:12:09
+
+Epoch: 61, batch: 500, train_loss: 0.0884, train_acc: 0.9744, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.55, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.87, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 61, lr: 2.0e-05, train_loss: 0.0885, train_acc: 0.9742 test_loss: 1.9668, test_acc: 0.6805, best: 0.6805 time: 0:12:09
+
+Epoch: 62, batch: 500, train_loss: 0.0809, train_acc: 0.9753, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.55, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.87, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:45
+Epoch: 62, lr: 2.0e-05, train_loss: 0.0815, train_acc: 0.9754 test_loss: 1.9717, test_acc: 0.6855, best: 0.6855 time: 0:12:08
+
+Epoch: 63, batch: 500, train_loss: 0.0769, train_acc: 0.9772, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.55, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.87, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:45
+Epoch: 63, lr: 2.0e-05, train_loss: 0.0770, train_acc: 0.9770 test_loss: 2.0002, test_acc: 0.6858, best: 0.6858 time: 0:12:09
+
+Epoch: 64, batch: 500, train_loss: 0.0781, train_acc: 0.9765, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.55, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.87, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:45
+Epoch: 64, lr: 2.0e-05, train_loss: 0.0798, train_acc: 0.9759 test_loss: 2.0096, test_acc: 0.6798, best: 0.6858 time: 0:12:01
+
+Epoch: 65, batch: 500, train_loss: 0.0759, train_acc: 0.9771, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.55, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.87, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 65, lr: 2.0e-05, train_loss: 0.0766, train_acc: 0.9771 test_loss: 1.9958, test_acc: 0.6857, best: 0.6858 time: 0:12:02
+
+Epoch: 66, batch: 500, train_loss: 0.0704, train_acc: 0.9788, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.55, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 66, lr: 2.0e-05, train_loss: 0.0703, train_acc: 0.9792 test_loss: 2.0373, test_acc: 0.6856, best: 0.6858 time: 0:12:02
+
+Epoch: 67, batch: 500, train_loss: 0.0715, train_acc: 0.9787, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.55, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.88, 0.87, 0.99, 0.86, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 67, lr: 2.0e-05, train_loss: 0.0728, train_acc: 0.9782 test_loss: 2.0440, test_acc: 0.6899, best: 0.6899 time: 0:12:09
+
+Epoch: 68, batch: 500, train_loss: 0.0703, train_acc: 0.9796, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:47
+Epoch: 68, lr: 2.0e-05, train_loss: 0.0702, train_acc: 0.9795 test_loss: 2.0418, test_acc: 0.6861, best: 0.6899 time: 0:12:13
+
+Epoch: 69, batch: 500, train_loss: 0.0633, train_acc: 0.9813, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:50
+Epoch: 69, lr: 2.0e-05, train_loss: 0.0650, train_acc: 0.9806 test_loss: 2.0558, test_acc: 0.6875, best: 0.6899 time: 0:12:15
+
+Epoch: 70, batch: 500, train_loss: 0.0656, train_acc: 0.9802, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:59
+Epoch: 70, lr: 2.0e-05, train_loss: 0.0648, train_acc: 0.9802 test_loss: 2.0755, test_acc: 0.6876, best: 0.6899 time: 0:12:22
+
+Epoch: 71, batch: 500, train_loss: 0.0621, train_acc: 0.9816, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.55, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:58
+Epoch: 71, lr: 2.0e-05, train_loss: 0.0629, train_acc: 0.9816 test_loss: 2.0791, test_acc: 0.6875, best: 0.6899 time: 0:12:15
+
+Epoch: 72, batch: 500, train_loss: 0.0639, train_acc: 0.9801, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.55, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:52
+Epoch: 72, lr: 2.0e-05, train_loss: 0.0622, train_acc: 0.9806 test_loss: 2.1013, test_acc: 0.6893, best: 0.6899 time: 0:12:10
+
+Epoch: 73, batch: 500, train_loss: 0.0629, train_acc: 0.9807, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 73, lr: 2.0e-05, train_loss: 0.0634, train_acc: 0.9806 test_loss: 2.0608, test_acc: 0.6909, best: 0.6909 time: 0:12:18
+
+Epoch: 74, batch: 500, train_loss: 0.0624, train_acc: 0.9811, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 74, lr: 2.0e-05, train_loss: 0.0622, train_acc: 0.9814 test_loss: 2.0674, test_acc: 0.6879, best: 0.6909 time: 0:12:08
+
+Epoch: 75, batch: 500, train_loss: 0.0613, train_acc: 0.9812, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:57
+Epoch: 75, lr: 2.0e-05, train_loss: 0.0618, train_acc: 0.9806 test_loss: 2.0527, test_acc: 0.6879, best: 0.6909 time: 0:12:18
+
+Epoch: 76, batch: 500, train_loss: 0.0569, train_acc: 0.9828, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:52
+Epoch: 76, lr: 2.0e-05, train_loss: 0.0578, train_acc: 0.9827 test_loss: 2.0518, test_acc: 0.6891, best: 0.6909 time: 0:12:12
+
+Epoch: 77, batch: 500, train_loss: 0.0573, train_acc: 0.9821, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:48
+Epoch: 77, lr: 2.0e-05, train_loss: 0.0600, train_acc: 0.9814 test_loss: 2.0502, test_acc: 0.6921, best: 0.6921 time: 0:12:13
+
+Epoch: 78, batch: 500, train_loss: 0.0527, train_acc: 0.9836, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:48
+Epoch: 78, lr: 2.0e-05, train_loss: 0.0521, train_acc: 0.9838 test_loss: 2.1317, test_acc: 0.6901, best: 0.6921 time: 0:12:07
+
+Epoch: 79, batch: 500, train_loss: 0.0592, train_acc: 0.9821, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.57, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:47
+Epoch: 79, lr: 2.0e-05, train_loss: 0.0585, train_acc: 0.9824 test_loss: 2.0868, test_acc: 0.6924, best: 0.6924 time: 0:12:11
+
+Epoch: 80, batch: 500, train_loss: 0.0530, train_acc: 0.9841, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:47
+Epoch: 80, lr: 4.0e-06, train_loss: 0.0546, train_acc: 0.9837 test_loss: 2.1091, test_acc: 0.6882, best: 0.6924 time: 0:12:06
+
+Epoch: 81, batch: 500, train_loss: 0.0514, train_acc: 0.9840, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:59
+Epoch: 81, lr: 4.0e-06, train_loss: 0.0517, train_acc: 0.9842 test_loss: 2.1133, test_acc: 0.6897, best: 0.6924 time: 0:12:26
+
+Epoch: 82, batch: 500, train_loss: 0.0480, train_acc: 0.9857, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:55
+Epoch: 82, lr: 4.0e-06, train_loss: 0.0500, train_acc: 0.9849 test_loss: 2.1032, test_acc: 0.6892, best: 0.6924 time: 0:12:13
+
+Epoch: 83, batch: 500, train_loss: 0.0516, train_acc: 0.9837, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:48
+Epoch: 83, lr: 4.0e-06, train_loss: 0.0514, train_acc: 0.9842 test_loss: 2.1057, test_acc: 0.6873, best: 0.6924 time: 0:12:07
+
+Epoch: 84, batch: 500, train_loss: 0.0526, train_acc: 0.9834, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:49
+Epoch: 84, lr: 4.0e-06, train_loss: 0.0492, train_acc: 0.9845 test_loss: 2.1047, test_acc: 0.6898, best: 0.6924 time: 0:12:06
+
+Epoch: 85, batch: 500, train_loss: 0.0527, train_acc: 0.9843, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:48
+Epoch: 85, lr: 4.0e-06, train_loss: 0.0508, train_acc: 0.9846 test_loss: 2.1091, test_acc: 0.6937, best: 0.6937 time: 0:12:12
+
+Epoch: 86, batch: 500, train_loss: 0.0548, train_acc: 0.9837, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:47
+Epoch: 86, lr: 4.0e-06, train_loss: 0.0540, train_acc: 0.9838 test_loss: 2.1065, test_acc: 0.6893, best: 0.6937 time: 0:12:05
+
+Epoch: 87, batch: 500, train_loss: 0.0476, train_acc: 0.9852, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:47
+Epoch: 87, lr: 4.0e-06, train_loss: 0.0483, train_acc: 0.9847 test_loss: 2.1382, test_acc: 0.6884, best: 0.6937 time: 0:12:03
+
+Epoch: 88, batch: 500, train_loss: 0.0503, train_acc: 0.9846, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 88, lr: 4.0e-06, train_loss: 0.0495, train_acc: 0.9847 test_loss: 2.1164, test_acc: 0.6902, best: 0.6937 time: 0:12:02
+
+Epoch: 89, batch: 500, train_loss: 0.0489, train_acc: 0.9857, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 89, lr: 4.0e-06, train_loss: 0.0477, train_acc: 0.9862 test_loss: 2.1140, test_acc: 0.6862, best: 0.6937 time: 0:12:02
+
+Epoch: 90, batch: 500, train_loss: 0.0431, train_acc: 0.9874, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 90, lr: 8.0e-07, train_loss: 0.0450, train_acc: 0.9865 test_loss: 2.1326, test_acc: 0.6878, best: 0.6937 time: 0:12:02
+
+Epoch: 91, batch: 500, train_loss: 0.0488, train_acc: 0.9851, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:48
+Epoch: 91, lr: 8.0e-07, train_loss: 0.0486, train_acc: 0.9852 test_loss: 2.0939, test_acc: 0.6901, best: 0.6937 time: 0:12:04
+
+Epoch: 92, batch: 500, train_loss: 0.0482, train_acc: 0.9851, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 92, lr: 8.0e-07, train_loss: 0.0498, train_acc: 0.9851 test_loss: 2.1057, test_acc: 0.6914, best: 0.6937 time: 0:12:03
+
+Epoch: 93, batch: 500, train_loss: 0.0477, train_acc: 0.9855, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 93, lr: 8.0e-07, train_loss: 0.0461, train_acc: 0.9859 test_loss: 2.1054, test_acc: 0.6922, best: 0.6937 time: 0:12:02
+
+Epoch: 94, batch: 500, train_loss: 0.0484, train_acc: 0.9859, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 94, lr: 8.0e-07, train_loss: 0.0482, train_acc: 0.9856 test_loss: 2.1034, test_acc: 0.6924, best: 0.6937 time: 0:12:04
+
+Epoch: 95, batch: 500, train_loss: 0.0476, train_acc: 0.9857, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:48
+Epoch: 95, lr: 8.0e-07, train_loss: 0.0464, train_acc: 0.9861 test_loss: 2.1248, test_acc: 0.6893, best: 0.6937 time: 0:12:04
+
+Epoch: 96, batch: 500, train_loss: 0.0480, train_acc: 0.9860, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 96, lr: 8.0e-07, train_loss: 0.0484, train_acc: 0.9856 test_loss: 2.1188, test_acc: 0.6902, best: 0.6937 time: 0:12:03
+
+Epoch: 97, batch: 500, train_loss: 0.0495, train_acc: 0.9848, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 97, lr: 8.0e-07, train_loss: 0.0489, train_acc: 0.9854 test_loss: 2.1132, test_acc: 0.6916, best: 0.6937 time: 0:12:02
+
+Epoch: 98, batch: 500, train_loss: 0.0467, train_acc: 0.9856, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 98, lr: 8.0e-07, train_loss: 0.0462, train_acc: 0.9858 test_loss: 2.0921, test_acc: 0.6931, best: 0.6937 time: 0:12:02
+
+Epoch: 99, batch: 500, train_loss: 0.0482, train_acc: 0.9851, threshold: [0.48, 1.4, 0.31, 0.95, 0.31, 0.64, 0.56, 0.14, 0.33, 1.1, 0.87, 1.61, 1.66, 0.88, 1.08], leak: [1.0, 0.74, 0.83, 0.76, 0.84, 0.87, 0.87, 0.99, 0.86, 0.84, 0.56, 0.39, 0.36, 0.37, 0.15], timesteps: 20, time: 0:06:46
+Epoch: 99, lr: 8.0e-07, train_loss: 0.0490, train_acc: 0.9853 test_loss: 2.1349, test_acc: 0.6903, best: 0.6937 time: 0:12:02
+ Highest accuracy: 0.6937
