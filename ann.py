@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms, models
-from torchviz import make_dot
 from matplotlib import pyplot as plt
 import pdb
 import sys

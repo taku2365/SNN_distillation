@@ -1,4 +1,8 @@
-
+##### form batch_norm ann to bstch_norm rnn layer + threshold has each time value
+##python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.1 --scaling_factor 0.3  --weight_decay 0.0 --pretrained_ann trained_models/ann_resnet20_cifar10_batch_on.pth  --lr_interval '0.10 0.40 0.70' --lr_reduce 5  --thresholds_new True --store_name batch_type3 --lr_interval '0.10 0.40 0.70' --lr_reduce 5 --timesteps 25                      
+##python3 snn_only.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.1 --scaling_factor 0.3  --weight_decay 0.0  --store_name batch_type3 --lr_interval '0.15 0.40 0.70' --lr_reduce 5 --timesteps 25  --epoch 500 -lr 0.002              
+## python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.3 --scaling_factor 0.3  --weight_decay 0.0 --pretrained_snn trained_models/snn_resnet20_batch_norm_cifar10_40__batch_type3_dropout03.pth  --lr_reduce 5  --store_name batch_type3_dropout03 --lr_interval '0.10 0.40 0.70' --lr_reduce 5 --timesteps 25  --epochs 500 -lr 0.002
+## python3 snn_only.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.3 --scaling_factor 0.3  --weight_decay 0.0 --pretrained_snn trained_models/snn_resnet20_batch_norm_cifar10_40__batch_type4_dropout03.pth  --lr_reduce 5  --store_name batch_type4_dropout03 --lr_interval '0.10 0.40 0.70' --lr_reduce 5 --timesteps 40  --epochs 500 -lr 0.002 --default_threshold 0.5 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,14 +13,81 @@ from collections import OrderedDict
 import copy
 
 cfg = {
-	'resnet6'	  : [1,1,0,0],
-	'resnet12' 	  : [1,1,1,1],
-	'resnet20'	  : [2,2,2,2],
-    'resnet20_se' : [2,2,2,2],
-	'resnet34'	  : [3,4,6,3]
+	'resnet6'	            : [1,1,0,0],
+	'resnet12' 	            : [1,1,1,1],
+	'resnet20'	            : [2,2,2,2],
+	'resnet20_batch_norm'	: [2,2,2,2],
+	'resnet34'	            : [3,4,6,3]
 }
 
-# python3 snn.py -a RESNET20 --optimizer Adam --dropout 0.1 --scaling_factor 0.3  --weight_decay 0.0 --pretrained_snn trained_models/snn_resnet20_cifar10_20__no_bias.pth  --store no_bias --timesteps 15  -lr 1e-4 --epochs 300
+
+class SeparatedBatchNorm1d(nn.Module):
+
+	"""
+	A batch normalization module which keeps its running mean
+	and variance separately per timestep.
+	"""
+
+	def __init__(self, num_features, max_length, eps=1e-5, momentum=0.1,
+				affine=True):
+		"""
+		Most parts are copied from
+		torch.nn.modules.batchnorm._BatchNorm.
+		"""
+
+		super(SeparatedBatchNorm1d, self).__init__()
+		self.num_features = num_features
+		self.max_length = max_length
+		self.affine = affine
+		self.eps = eps
+		self.momentum = momentum
+		if self.affine:
+			self.weight = nn.Parameter(torch.FloatTensor(num_features))
+			self.bias = nn.Parameter(torch.FloatTensor(num_features))
+		else:
+			self.register_parameter('weight', None)
+			self.register_parameter('bias', None)
+		for i in range(max_length):
+			self.register_buffer(
+				'running_mean_{}'.format(i), torch.zeros(num_features))
+			self.register_buffer(
+				'running_var_{}'.format(i), torch.ones(num_features))
+		self.reset_parameters()
+
+	def reset_parameters(self):
+		for i in range(self.max_length):
+			running_mean_i = getattr(self, 'running_mean_{}'.format(i))
+			running_var_i = getattr(self, 'running_var_{}'.format(i))
+			running_mean_i.zero_()
+			running_var_i.fill_(1)
+		if self.affine:
+			self.weight.data.uniform_()
+			self.bias.data.zero_()
+
+	def _check_input_dim(self, input_):
+		if input_.size(1) != self.running_mean_0.nelement():
+			raise ValueError('got {}-feature tensor, expected {}'
+							.format(input_.size(1), self.num_features))
+
+	def forward(self, input_, time):
+
+		self._check_input_dim(input_)
+		if time >= self.max_length:
+			time = self.max_length - 1
+		running_mean = getattr(self, 'running_mean_{}'.format(time))
+		running_var = getattr(self, 'running_var_{}'.format(time))
+
+		return F.batch_norm(
+			input=input_, running_mean=running_mean, running_var=running_var,
+			weight=self.weight, bias=self.bias, training=self.training,
+			momentum=self.momentum, eps=self.eps)
+
+	def __repr__(self):
+		return ('{name}({num_features}, eps={eps}, momentum={momentum},'
+				' max_length={max_length}, affine={affine})'
+				.format(name=self.__class__.__name__, **self.__dict__))
+
+
 
 class LinearSpike(torch.autograd.Function):
     """
@@ -41,131 +112,106 @@ class LinearSpike(torch.autograd.Function):
         grad       = LinearSpike.gamma*F.threshold(1.0-torch.abs(input), 0, 0)
         return grad*grad_input, None
 
-class SELayer(nn.Module):
-    def __init__(self, channel, reduction=16,expansion=1):
-        super(SELayer, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-            nn.Linear(channel, channel // reduction, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Linear(channel // reduction, channel, bias=False),
-            nn.Sigmoid()
-        )
-        self.expansion = expansion
-
-    
-
-
-    def forward(self, x,rst):
-        b, c, _, _ = x.size()
-        y = self.avg_pool(x).view(b, c*self.expansion)
-        y = self.fc(y).view(b,c*self.expansion, 1, 1)
-        return rst * y.expand_as(x)
-
-
-
 class BasicBlock(nn.Module):
-    expansion = 1
+	expansion = 1
 
-    def __init__(self, in_planes, planes, stride, dropout,batch_flag,bias,timesteps):
-        #print('In __init__ BasicBlock')
-        #super(BasicBlock, self).__init__()
-        super().__init__()
-        self.identity_conv_flag = False
-        if batch_flag:
-            self.residual = nn.Sequential(
-                nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False),
-                nn.BatchNorm2d(planes),
-                nn.ReLU(inplace=True),
-                nn.Dropout(dropout),
-                nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False),
-                nn.BatchNorm2d(planes),
-                )
-            self.identity = nn.Sequential()
-            if stride != 1 or in_planes != self.expansion*planes:
-                self.identity = nn.Sequential(
-                    nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=False),
-                    nn.BatchNorm2d(self.expansion*planes)
-                )
-        else:
-            self.residual = nn.Sequential(
-                nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=bias),
-                #nn.BatchNorm2d(planes),
-                nn.ReLU(inplace=True),
-                nn.Dropout(dropout),
-                nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=bias),
-                #nn.BatchNorm2d(planes),
-                )
-            self.identity = nn.Sequential()
-            if stride != 1 or in_planes != self.expansion*planes:
-                self.identity_conv_flag = True
-                self.identity = nn.Sequential(
-                    nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=bias),
-                    #nn.BatchNorm2d(self.expansion*planes)
-                )
-        self.residual_se = SELayer(in_planes)
-        self.residual_se3 = SELayer(planes)
-        
-        
-
-
-
-
-    def forward(self, dic):
-        
-        out_prev 		= dic['out_prev']
-        pos 			= dic['pos']
-        act_func 		= dic['act_func']
-        mem 			= dic['mem']
-        spike 			= dic['spike']
-        mask 			= dic['mask']
-        threshold 		= dic['threshold']
-        t 				= dic['t']
-        leak			= dic['leak']
-        #find_max_mem 	= dic['find_max_mem']
-        inp				= out_prev.clone()
-        
-        #conv1
-        mem_thr 		= (mem[pos]/getattr(threshold, 't'+str(pos))) - 1.0
-        rst 			= getattr(threshold, 't'+str(pos)) * (mem_thr>0).float()
-        residual_conv = self.residual[0](inp)
-        # mem[pos] 		= getattr(leak, 'l'+str(pos)) *mem[pos] + residual_conv - self.residual_se(residual_conv,rst)
-        mem[pos] 		= getattr(leak, 'l'+str(pos)) *mem[pos] + residual_conv - rst
-        #batch normalization
-
-
-        #relu1
-        out 			= act_func(mem_thr, (t-1-spike[pos]))
-        spike[pos] 		= spike[pos].masked_fill(out.bool(),t-1)
-        out_prev  		= out.clone()
-
-        #dropout1
-        out_prev 		= out_prev * mask[pos]
-        
-        #conv2+identity
-        mem_thr 		= (mem[pos+1]/getattr(threshold, 't'+str(pos+1))) - 1.0
-        rst 			= getattr(threshold, 't'+str(pos+1)) * (mem_thr>0).float()
-        identity  = self.identity(inp)
-        residual_conv2 = self.residual[3](out_prev)
-        # print("inp rst {} {} ".format(inp.shape,rst.shape))
-        mem[pos+1] 		= getattr(leak, 'l'+str(pos+1))*mem[pos+1] + residual_conv2  + identity - self.residual_se3(residual_conv2 ,rst)
-
-
-        #relu2
-        out 			= act_func(mem_thr, (t-1-spike[pos+1]))
-        spike[pos+1]	= spike[pos+1].masked_fill(out.bool(),t-1)
-        out_prev  		= out.clone()
-
-        return out_prev
+	def __init__(self, in_planes, planes, stride, dropout,batch_flag,bias,timesteps):
+		#print('In __init__ BasicBlock')
+		#super(BasicBlock, self).__init__()
+		super().__init__()
+		self.identity_conv_flag = False
+		if batch_flag:
+			self.residual = nn.Sequential(
+				nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False),
+				nn.BatchNorm2d(planes),
+				nn.ReLU(inplace=True),
+				nn.Dropout(dropout),
+				nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False),
+				nn.BatchNorm2d(planes),
+				)
+			self.identity = nn.Sequential()
+			if stride != 1 or in_planes != self.expansion*planes:
+				self.identity = nn.Sequential(
+					nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=False),
+					nn.BatchNorm2d(self.expansion*planes)
+				)
+		else:
+			self.residual = nn.Sequential(
+				nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=bias),
+				#nn.BatchNorm2d(planes),
+				nn.ReLU(inplace=True),
+				nn.Dropout(dropout),
+				nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=bias),
+				#nn.BatchNorm2d(planes),
+				)
+			self.identity = nn.Sequential()
+			if stride != 1 or in_planes != self.expansion*planes:
+				self.identity_conv_flag = True
+				self.identity = nn.Sequential(
+					nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=bias),
+					#nn.BatchNorm2d(self.expansion*planes)
+				)
+		
+		self.residual_batch0 = SeparatedBatchNorm1d(num_features=planes, max_length=timesteps)
+		self.residual_batch3 = SeparatedBatchNorm1d(num_features=planes, max_length=timesteps)
+		self.identity_batch= SeparatedBatchNorm1d(num_features=self.expansion*planes, max_length=timesteps)
 
 
 
 
-class RESNET_SNN_SE(nn.Module):
-    
+
+
+	def forward(self, dic):
+		
+		out_prev 		= dic['out_prev']
+		pos 			= dic['pos']
+		act_func 		= dic['act_func']
+		mem 			= dic['mem']
+		spike 			= dic['spike']
+		mask 			= dic['mask']
+		threshold 		= dic['threshold']
+		t 				= dic['t']
+		leak			= dic['leak']
+		find_max_mem 	= dic['find_max_mem']
+		inp				= out_prev.clone()
+		
+		#conv1
+		mem_thr 		= (mem[pos]/getattr(threshold,'t'+str(t) +str(pos))) - 1.0
+		rst 			= getattr(threshold,'t'+str(t) + str(pos)) * (mem_thr>0).float()
+		residual_batch  = self.residual_batch0(self.residual[0](inp),t) if not find_max_mem else self.residual[0](inp)
+		mem[pos] 		= getattr(leak, 'l'+str(t)+str(pos)) *mem[pos] + residual_batch - rst
+
+		#batch normalization
+
+
+		#relu1
+		out 			= act_func(mem_thr, (t-1-spike[pos]))
+		spike[pos] 		= spike[pos].masked_fill(out.bool(),t-1)
+		out_prev  		= out.clone()
+
+		#dropout1
+		out_prev 		= out_prev * mask[pos]
+		
+		#conv2+identity
+		mem_thr 		= (mem[pos+1]/getattr(threshold, 't'+str(t)+str(pos+1))) - 1.0
+		rst 			= getattr(threshold, 't'+str(t)+str(pos+1)) * (mem_thr>0).float()
+		residual_batch  = self.residual_batch3(self.residual[3](out_prev),t)
+		identity  = self.identity_batch(self.identity(inp),t) if self.identity_conv_flag else self.identity(inp)
+		identity =  identity if not find_max_mem else self.identity(inp)
+		mem[pos+1] 		= getattr(leak,'l'+str(t)+str(pos+1))*mem[pos+1] + residual_batch + identity - rst
+
+		#relu2
+		out 			= act_func(mem_thr, (t-1-spike[pos+1]))
+		spike[pos+1]	= spike[pos+1].masked_fill(out.bool(),t-1)
+		out_prev  		= out.clone()
+
+		return out_prev
+
+class RESNET_SNN_BATCH_NORM(nn.Module):
+	
     #all_layers = []
     #drop 		= 0.2
-    def __init__(self, resnet_name, activation='Linear', labels=10, timesteps=75, leak=1.0, default_threshold=1.0, dropout=0.2, dataset='CIFAR10',batch_flag=False,bias=False):
+    def __init__(self, resnet_name, activation='Linear', labels=10, timesteps=75, leak=1.0, default_threshold=1, dropout=0.2, dataset='CIFAR10',batch_flag=False,bias=False):
 
         super().__init__()
         
@@ -178,6 +224,7 @@ class RESNET_SNN_SE(nn.Module):
         self.mem 			         = {}
         self.mask 			         = {}
         self.spike 			         = {}
+        self.pre_process_batch_norm  = {}
 
 
         
@@ -213,7 +260,8 @@ class RESNET_SNN_SE(nn.Module):
 
         block               = BasicBlock
         self.in_planes      = 64
-        
+
+
         self.layer1 		= self._make_layer(block, 64,  cfg[self.resnet_name][0], stride=1, dropout=self.dropout\
             ,batch_flag=batch_flag,bias=bias,timesteps=self.timesteps)
         self.layer2 		= self._make_layer(block, 128, cfg[self.resnet_name][1], stride=2, dropout=self.dropout\
@@ -229,47 +277,50 @@ class RESNET_SNN_SE(nn.Module):
                                     )
 
         self.layers = {1: self.layer1, 2: self.layer2, 3: self.layer3, 4:self.layer4}
-        self.pre_process_se0 = SELayer(64)
-        self.pre_process_se3 = SELayer(64)
-        self.pre_process_se6 = SELayer(64)
-        self.classifier_se = SELayer(512*2*2)
 
-        self.pre_process_se = {0:self.pre_process_se0,3:self.pre_process_se3,6:self.pre_process_se6}
+        self.pre_process_batch0 = SeparatedBatchNorm1d(num_features=64, max_length=self.timesteps)
+        self.pre_process_batch3 = SeparatedBatchNorm1d(num_features=64, max_length=self.timesteps)
+        self.pre_process_batch6 = SeparatedBatchNorm1d(num_features=64, max_length=self.timesteps)
+
+        self.pre_process_batch_norm = {0:self.pre_process_batch0,3:self.pre_process_batch3,6:self.pre_process_batch6}
 
         self._initialize_weights2()
-        
+
         threshold 	= {}
         lk 			= {}
-        for l in range(len(self.pre_process)):
-            if isinstance(self.pre_process[l],nn.Conv2d):
-                threshold['t'+str(l)] 	= nn.Parameter(torch.tensor(default_threshold))
-                lk['l'+str(l)] 	  		= nn.Parameter(torch.tensor(leak))
 
-        pos = len(self.pre_process)
-                
-        for i in range(1,5):
+        for t in range(self.timesteps):
+            for l in range(len(self.pre_process)):
+                if isinstance(self.pre_process[l],nn.Conv2d):
+                    threshold['t'+str(t)+str(l)] 	= nn.Parameter(torch.tensor(default_threshold))
+                    lk['l'+str(t)+str(l)] 	  		= nn.Parameter(torch.tensor(leak))
 
-            layer = self.layers[i]
-            for index in range(len(layer)):
-                for l in range(len(layer[index].residual)):
-                    if isinstance(layer[index].residual[l],nn.Conv2d):
-                        threshold['t'+str(pos)] = nn.Parameter(torch.tensor(default_threshold))
-                        lk['l'+str(pos)] 		= nn.Parameter(torch.tensor(leak))
-                        pos=pos+1
+            pos = len(self.pre_process)
+                    
+            for i in range(1,5):
 
-        for l in range(len(self.classifier)-1):
-            if isinstance(self.classifier[l], nn.Linear):
-                threshold['t'+str(pos+l)] 		= nn.Parameter(torch.tensor(default_threshold))
-                lk['l'+str(pos+l)] 				= nn.Parameter(torch.tensor(leak)) 
-                
-        self.threshold 	= nn.ParameterDict(threshold)
-        self.leak 		= nn.ParameterDict(lk)
+                layer = self.layers[i]
+                for index in range(len(layer)):
+                    for l in range(len(layer[index].residual)):
+                        if isinstance(layer[index].residual[l],nn.Conv2d):
+                            threshold['t'+str(t)+str(pos)] = nn.Parameter(torch.tensor(default_threshold))
+                            lk['l'+str(t)+str(pos)] 		= nn.Parameter(torch.tensor(leak))
+                            pos=pos+1
 
-        
-        
+            for l in range(len(self.classifier)-1):
+                if isinstance(self.classifier[l], nn.Linear):
+                    threshold['t'+str(t)+str(pos+l)] 		= nn.Parameter(torch.tensor(default_threshold))
+                    lk['l'+str(t)+str(pos+l)] 				= nn.Parameter(torch.tensor(leak)) 
+                    
+            self.threshold 	= nn.ParameterDict(threshold)
+            self.leak 		= nn.ParameterDict(lk)
+
+		
+		
     def _initialize_weights2(self):
 
         for m in self.modules():
+            
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                 m.weight.data.normal_(0, math.sqrt(2. / n))
@@ -278,6 +329,8 @@ class RESNET_SNN_SE(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
+            elif isinstance(m,SeparatedBatchNorm1d):
+                m.reset_parameters()
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
@@ -290,11 +343,12 @@ class RESNET_SNN_SE(nn.Module):
     def threshold_update(self, scaling_factor=1.0, thresholds=[]):
         
         self.scaling_factor = scaling_factor
-            
-        for pos in range(len(self.pre_process)):
-            if isinstance(self.pre_process[pos],nn.Conv2d):
-                if thresholds:
-                    self.threshold.update({'t'+str(pos): nn.Parameter(torch.tensor(thresholds.pop(0)*self.scaling_factor))})
+
+        for t in range(self.timesteps):			
+            for pos in range(len(self.pre_process)):
+                if isinstance(self.pre_process[pos],nn.Conv2d):
+                    if thresholds:
+                        self.threshold.update({'t'+str(t)+str(pos): nn.Parameter(torch.tensor(thresholds.pop(0)*self.scaling_factor))})
 
         pos = len(self.pre_process)
         for i in range(1,5):
@@ -305,11 +359,12 @@ class RESNET_SNN_SE(nn.Module):
                         
                         pos = pos+1
 
-        for l in range(len(self.classifier)):
-            if isinstance(self.classifier[l], nn.Linear):
-                if thresholds:
-                    self.threshold.update({'t'+str(pos+l): nn.Parameter(torch.tensor(thresholds.pop(0)*self.scaling_factor))})
-            
+        for t in range(self.timesteps):
+            for l in range(len(self.classifier)):
+                if isinstance(self.classifier[l], nn.Linear):
+                    if thresholds:
+                        self.threshold.update({'t'+str(t)+str(pos+l): nn.Parameter(torch.tensor(thresholds.pop(0)*self.scaling_factor))})
+			
 
     def _make_layer(self, block, planes, num_blocks, stride, dropout,batch_flag,bias,timesteps):
 
@@ -396,13 +451,10 @@ class RESNET_SNN_SE(nn.Module):
                             max_mem = torch.tensor([cur])
                         break
 
-                    mem_thr 		= (self.mem[l]/getattr(self.threshold, 't'+str(l))) - 1.0
-                    rst 			= getattr(self.threshold, 't'+str(l)) * (mem_thr>0).float()
-                    # se_layer = self.pre_process_se[l](out_prev,rst) if(l!=0) else 0
-                    se_conv =self.pre_process[l](out_prev)
-
-                    # self.mem[l] 	= getattr(self.leak, 'l'+str(l)) *self.mem[l] +  se_conv - self.pre_process_se[l](se_conv,rst)
-                    self.mem[l] 	= getattr(self.leak, 'l'+str(l)) *self.mem[l] +  se_conv - rst
+                    mem_thr 		= (self.mem[l]/getattr(self.threshold,'t'+str(t)+str(l))) - 1.0
+                    rst 			= getattr(self.threshold, 't'+str(t)+str(l)) * (mem_thr>0).float()
+                    pre_process_conv_batch = self.pre_process_batch_norm[l](self.pre_process[l](out_prev),t) if not find_max_mem else self.pre_process[l](out_prev)
+                    self.mem[l] 	= getattr(self.leak, 'l'+str(t)+str(l)) *self.mem[l] + pre_process_conv_batch- rst
                     
                 elif isinstance(self.pre_process[l], nn.ReLU):
                     out 			= self.act_func(mem_thr, (t-1-self.spike[l-1]))
@@ -428,7 +480,7 @@ class RESNET_SNN_SE(nn.Module):
             for i in range(1,5):
                 layer = self.layers[i]
                 for index in range(len(layer)):
-                    out_prev = layer[index]({'out_prev':out_prev.clone(), 'pos': pos, 'act_func': self.act_func, 'mem':self.mem, 'spike':self.spike, 'mask':self.mask, 'threshold':self.threshold, 't': t, 'leak':self.leak})
+                    out_prev = layer[index]({'out_prev':out_prev.clone(), 'pos': pos, 'act_func': self.act_func, 'mem':self.mem, 'spike':self.spike, 'mask':self.mask, 'threshold':self.threshold, 't': t, 'leak':self.leak ,'find_max_mem':find_max_mem})
                     pos = pos+2
             
             #out_prev = self.avgpool(out_prev)
@@ -442,13 +494,11 @@ class RESNET_SNN_SE(nn.Module):
                             max_mem = (self.classifier[l](out_prev)).max()
                         break
 
-                    mem_thr 			= (self.mem[pos+l]/getattr(self.threshold, 't'+str(pos+l))) - 1.0
+                    mem_thr 			= (self.mem[pos+l]/getattr(self.threshold,'t'+str(t)+str(pos+l))) - 1.0
                     out 				= self.act_func(mem_thr, (t-1-self.spike[pos+l]))
-                    rst 				= getattr(self.threshold, 't'+str(pos+l)) * (mem_thr>0).float()
+                    rst 				= getattr(self.threshold, 't'+str(t)+str(pos+l)) * (mem_thr>0).float()
                     self.spike[pos+l] 	= self.spike[pos+l].masked_fill(out.bool(),t-1)
-                    classifier_se = self.classifier[l](out_prev)
-                    # self.mem[pos+l] 	= getattr(self.leak, 'l'+str(pos+l))*self.mem[pos+l] + classifier_se - self.classifier_se(classifier_se,rst) 
-                    self.mem[pos+l] 	= getattr(self.leak, 'l'+str(pos+l))*self.mem[pos+l] + classifier_se - rst
+                    self.mem[pos+l] 	= getattr(self.leak, 'l'+str(t)+str(pos+l))*self.mem[pos+l] + self.classifier[l](out_prev) - rst
                     out_prev  			= out.clone()
 
                 elif isinstance(self.classifier[l], nn.Dropout):
@@ -469,6 +519,20 @@ class RESNET_SNN_SE(nn.Module):
             return self.mem[pos+l+1]
         else:
             return self.mem[pos]	
+
+
+	
+
+
+
+
+
+
+
+
+
+
+
 
 
 

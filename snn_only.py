@@ -44,70 +44,6 @@ class AverageMeter(object):
         fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
         return fmtstr.format(**self.__dict__)
 
-def find_threshold(batch_size=512, timesteps=2500, architecture='VGG16'):
-    
-    loader = torch.utils.data.DataLoader(dataset=trainset, batch_size=batch_size, shuffle=True)
-    model.module.network_update(timesteps=timesteps, leak=1.0)
-    pos=0
-    thresholds=[]
-    
-    def find(layer):
-        max_act=0
-        
-        f.write('\n Finding threshold for layer {}'.format(layer))
-        for batch_idx, (data, target) in enumerate(loader):
-            
-            if torch.cuda.is_available() and args.gpu:
-                data, target = data.cuda(), target.cuda()
-
-            with torch.no_grad():
-                model.eval()
-                output = model(data, find_max_mem=True, max_mem_layer=layer)
-                if output>max_act:
-                    max_act = output.item()
-
-                #f.write('\nBatch:{} Current:{:.4f} Max:{:.4f}'.format(batch_idx+1,output.item(),max_act))
-                if batch_idx==0:
-                    thresholds.append(max_act)
-                    f.write(' {}'.format(thresholds))
-                    model.module.threshold_update(scaling_factor=1.0, thresholds=thresholds[:])
-                    break
-    
-    if architecture.lower().startswith('vgg'):              
-        for l in model.module.features.named_children():
-            if isinstance(l[1], nn.Conv2d):
-                find(int(l[0]))
-        
-        for c in model.module.classifier.named_children():
-            if isinstance(c[1], nn.Linear):
-                if (int(c[0]) == len(model.module.classifier) -1):
-                    break
-                else:
-                    find(int(l[0])+int(c[0])+1)
-
-    if architecture.lower().startswith('res'):
-        for l in model.module.pre_process.named_children():
-            if isinstance(l[1], nn.Conv2d):
-                find(int(l[0]))
-        
-        pos = len(model.module.pre_process)
-
-        for i in range(1,5):
-            layer = model.module.layers[i]
-            for index in range(len(layer)):
-                for l in range(len(layer[index].residual)):
-                    if isinstance(layer[index].residual[l],nn.Conv2d):
-                        pos = pos +1
-
-        for c in model.module.classifier.named_children():
-            if isinstance(c[1],nn.Linear):
-                if (int(c[0])==len(model.module.classifier)-1):
-                    break
-                else:
-                    find(int(c[0])+pos)
-
-    f.write('\n ANN thresholds: {}'.format(thresholds))
-    return thresholds
 
 def train(epoch):
 
@@ -178,36 +114,15 @@ def test(epoch):
 
     losses = AverageMeter('Loss')
     top1   = AverageMeter('Acc@1')
-
+    
     if args.test_only:
         temp1 = []  
-        temp2 = []
-
-
-
-        i = 0
-        i1 = 0
-        j = 0
-        j1 = 0
-        for key, value in sorted(model.module.threshold.items(), key=lambda x: (int(x[0][1:]), (x[1]))):
-            if(i==timesteps-1):
-
-                print("Thresholds t{}  {}\n".format(i1,temp1))
-                temp1=[]
-                i1 += 1
-
-                i = 0
+        temp2 = []  
+        for key, value in sorted(model.module.threshold.items(), key=lambda x: (int(x[0][1:]), (x[1]))):    
             temp1 = temp1+[round(value.item(),2)]   
-            i += 1
-
         for key, value in sorted(model.module.leak.items(), key=lambda x: (int(x[0][1:]), (x[1]))): 
-            if(j==timesteps-1):
-                print("leak t{}  {}\n".format(j1,temp2))
-                temp2=[]
-                j = 0
-                j1 += 1
             temp2 = temp2+[round(value.item(),2)]   
-            j += 1
+        f.write('\n Thresholds: {}, leak: {}'.format(temp1, temp2))
 
     with torch.no_grad():
         model.eval()
@@ -237,36 +152,13 @@ def test(epoch):
                     top1.avg
                     )
                 )
-
-        temp1 = []  
+        
+        temp1 = []
         temp2 = []
-        temp3 = []
-        temp4 = []
-
-        i = 0
-        i1 = 0
-        j = 0
-        j1 = 0
         for key, value in sorted(model.module.threshold.items(), key=lambda x: (int(x[0][1:]), (x[1]))):
-            if(i==timesteps-1):
-                # print("Thresholds t{}  {}\n".format(i1,temp1))
-                temp1=[]
-                i1 += 1
-
-                i = 0
-            temp1 = temp1+[round(value.item(),2)]
-            temp3 = temp3+[round(value.item(),2)]   
-            i += 1
-
-        for key, value in sorted(model.module.leak.items(), key=lambda x: (int(x[0][1:]), (x[1]))): 
-            if(j==timesteps-1):
-                # print("leak t{}  {}\n".format(j1,temp2))
-                temp2=[]
-                j = 0
-                j1 += 1
-            temp2 = temp2+[round(value.item(),2)]
-            temp4 = temp4+[round(value.item(),2)]   
-            j += 1
+                temp1 = temp1+[value.item()]
+        for key, value in sorted(model.module.leak.items(), key=lambda x: (int(x[0][1:]), (x[1]))):
+                temp2 = temp2+[value.item()]
         
         # if epoch>5 and top1.avg<0.15:
         #     f.write('\n Quitting as the training is not progressing')
@@ -280,9 +172,9 @@ def test(epoch):
                     'epoch'                 : epoch,
                     'state_dict'            : model.state_dict(),
                     'optimizer'             : optimizer.state_dict(),
-                    'thresholds'            : temp3,
+                    'thresholds'            : temp1,
                     'timesteps'             : timesteps,
-                    'leak'                  : temp4,
+                    'leak'                  : temp2,
                     'activation'            : activation
                 }
             try:
@@ -500,39 +392,7 @@ if __name__ == '__main__':
     model = nn.DataParallel(model) 
     #model = nn.parallel.DistributedDataParallel(model)
     #pdb.set_trace()
-
-    if pretrained_ann:
-      
-        state = torch.load(pretrained_ann, map_location='cpu')
-        
-        missing_keys, unexpected_keys = model.load_state_dict(state['state_dict'], strict=False)
-        f.write('\n Missing keys : {}, Unexpected Keys: {}'.format(missing_keys, unexpected_keys))        
-        f.write('\n Info: Accuracy of loaded ANN model: {}'.format(state['accuracy']))
-
-        #If thresholds present in loaded ANN file
-        if ('thresholds' in state.keys()) and not thresholds_new:
-            
-            thresholds = state['thresholds']
-            f.write('\n Info: Thresholds loaded from trained ANN: {}'.format(thresholds))
-            model.module.threshold_update(scaling_factor = scaling_factor, thresholds=thresholds[:])
-        else:
-            thresholds = find_threshold(batch_size=512, timesteps=500, architecture=architecture)
-            model.module.threshold_update(scaling_factor = scaling_factor, thresholds=thresholds[:])
-            
-            #Save the threhsolds in the ANN file
-            temp = {}
-            for key,value in state.items():
-                temp[key] = value
-            temp['thresholds'] = thresholds
-            torch.save(temp, pretrained_ann)
-    
-    elif pretrained_snn:
-                
-        state = torch.load(pretrained_snn, map_location='cpu')
-        missing_keys, unexpected_keys = model.load_state_dict(state['state_dict'], strict=False)
-        f.write('\n Missing keys : {}, Unexpected Keys: {}'.format(missing_keys, unexpected_keys))        
-        f.write('\n Info: Accuracy of loaded ANN model: {}'.format(state['accuracy']))
-       
+ 
     f.write('\n {}'.format(model))
     
     #model = nn.DataParallel(model) 
@@ -549,22 +409,6 @@ if __name__ == '__main__':
         
     # find_threshold() alters the timesteps and leak, restoring it here
     model.module.network_update(timesteps=timesteps, leak=leak)
-    
-    if resume:
-        f.write('\n Resuming from checkpoint {}'.format(resume))
-        state = torch.load(resume, map_location='cpu')
-        missing_keys, unexpected_keys = model.load_state_dict(state['state_dict'], strict=False)
-        f.write('\n Missing keys : {}, Unexpected Keys: {}'.format(missing_keys, unexpected_keys))        
-        f.write('\n Info: Accuracy of loaded ANN model: {}'.format(state['accuracy']))
-              
-        epoch           = state['epoch']
-        start_epoch     = epoch + 1
-        max_accuracy    = state['accuracy']
-        optimizer.load_state_dict(state['optimizer'])
-        for param_group in optimizer.param_groups:
-            learning_rate =  param_group['lr']
-
-        f.write('\n Loaded from resume epoch: {}, accuracy: {:.4f} lr: {:.1e}'.format(epoch, max_accuracy, learning_rate))
 
     for epoch in range(start_epoch, epochs):
         start_time = datetime.datetime.now()

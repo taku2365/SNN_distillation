@@ -1,5 +1,8 @@
-##### form no batch_norm ann to bstch_norm rnn layer
-
+##### form batch_norm ann to bstch_norm rnn layer
+##python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.1 --scaling_factor 0.3  --weight_decay 0.0 --pretrained_ann trained_models/ann_resnet20_cifar10_batch_on.pth  --lr_interval '0.10 0.40 0.70' --lr_reduce 5  --thresholds_new True --store_name batch_type3 --lr_interval '0.10 0.40 0.70' --lr_reduce 5 --timesteps 25                      
+##python3 snn_only.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.1 --scaling_factor 0.3  --weight_decay 0.0  --store_name batch_type3 --lr_interval '0.15 0.40 0.70' --lr_reduce 5 --timesteps 25  --epoch 500 -lr 0.002              
+## python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.3 --scaling_factor 0.3  --weight_decay 0.0 --pretrained_snn trained_models/snn_resnet20_batch_norm_cifar10_40__batch_type3_dropout03.pth  --lr_reduce 5  --store_name batch_type3_dropout03 --lr_interval '0.10 0.40 0.70' --lr_reduce 5 --timesteps 25  --epochs 500 -lr 0.002
+## python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.3 --scaling_factor 0.3  --weight_decay 0.0 --pretrained_snn trained_models/snn_resnet20_batch_norm_cifar10_40__batch_type3_dropout03.pth  --lr_reduce 5  --store_name batch_type3_dropout03 --lr_interval '0.10 0.40 0.70' --lr_reduce 5 --timesteps 40  --epochs 500 -lr 0.002 --default_threshold 0.5 --test_only
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -208,7 +211,7 @@ class RESNET_SNN_BATCH_NORM(nn.Module):
 	
 	#all_layers = []
 	#drop 		= 0.2
-	def __init__(self, resnet_name, activation='Linear', labels=10, timesteps=75, leak=1.0, default_threshold=1.0, dropout=0.2, dataset='CIFAR10',batch_flag=False,bias=False):
+	def __init__(self, resnet_name, activation='Linear', labels=10, timesteps=75, leak=1.0, default_threshold=1, dropout=0.2, dataset='CIFAR10',batch_flag=False,bias=False):
 
 		super().__init__()
 		
@@ -512,8 +515,6 @@ class RESNET_SNN_BATCH_NORM(nn.Module):
 			return self.mem[pos+l+1]
 		else:
 			return self.mem[pos]	
-
-
 
 
 	
