@@ -10,6 +10,7 @@ import math
 from collections import OrderedDict
 from matplotlib import pyplot as plt
 import copy
+from .SeparatedBatchNorm1d import SeparatedBatchNorm1d
 
 cfg = {
 	'VGG4' : [64, 'A', 128, 'A'],
@@ -29,7 +30,7 @@ class LinearSpike(torch.autograd.Function):
     gamma = 0.3 # Controls the dampening of the piecewise-linear surrogate gradient
 
     @staticmethod
-    def forward(ctx, input, last_spike):
+    def forward(ctx, input):
         
         ctx.save_for_backward(input)
         out = torch.zeros_like(input).cuda()
@@ -48,7 +49,7 @@ class VGG_SNN(nn.Module):
 
 	def __init__(self, vgg_name, activation='Linear', labels=10, timesteps=100, leak=1.0, default_threshold = 1.0, dropout=0.2, kernel_size=3, dataset='CIFAR10'):
 		super().__init__()
-		
+
 		self.vgg_name 		= vgg_name
 		self.act_func 		= LinearSpike.apply
 		self.labels 		= labels
@@ -59,31 +60,34 @@ class VGG_SNN(nn.Module):
 		self.mem 			= {}
 		self.mask 			= {}
 		self.spike 			= {}
-		
+
 		self.features, self.classifier = self._make_layers(cfg[self.vgg_name])
+
+
 		
 		self._initialize_weights2()
 
 		threshold 	= {}
 		lk 	  		= {}
-		for l in range(len(self.features)):
-			if isinstance(self.features[l], nn.Conv2d):
-				threshold['t'+str(l)] 	= nn.Parameter(torch.tensor(default_threshold))
-				lk['l'+str(l)]			= nn.Parameter(torch.tensor(leak))
+		for t in range(self.timesteps):
+			for l in range(len(self.features)):
+				if isinstance(self.features[l], nn.Conv2d):
+					threshold['t'+str(t)+str(l)] 	= nn.Parameter(torch.tensor(default_threshold))
+					lk['l'+str(t)+str(l)]			= nn.Parameter(torch.tensor(leak))
 								
 				
-		prev = len(self.features)
-		for l in range(len(self.classifier)-1):
-			if isinstance(self.classifier[l], nn.Linear):
-				threshold['t'+str(prev+l)] 	= nn.Parameter(torch.tensor(default_threshold))
-				lk['l'+str(prev+l)] 		= nn.Parameter(torch.tensor(leak))
+			prev = len(self.features)
+			for l in range(len(self.classifier)-1):
+				if isinstance(self.classifier[l], nn.Linear):
+					threshold['t'+str(t)+str(prev+l)] 	= nn.Parameter(torch.tensor(default_threshold))
+					lk['l'+str(t)+str(prev+l)] 		= nn.Parameter(torch.tensor(leak))
 				
 		self.threshold 	= nn.ParameterDict(threshold)
 		self.leak 		= nn.ParameterDict(lk)
-		
+
 	def _initialize_weights2(self):
 		for m in self.modules():
-            
+			
 			if isinstance(m, nn.Conv2d):
 				n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
 				m.weight.data.normal_(0, math.sqrt(2. / n))
@@ -97,25 +101,30 @@ class VGG_SNN(nn.Module):
 				m.weight.data.normal_(0, 0.01)
 				if m.bias is not None:
 					m.bias.data.zero_()
+					
+			elif isinstance(m,SeparatedBatchNorm1d):
+				m.reset_parameters()
 
 	def threshold_update(self, scaling_factor=1.0, thresholds=[]):
 
 		# Initialize thresholds
 		self.scaling_factor = scaling_factor
+
+		for t in range(self.timesteps):
 		
-		for pos in range(len(self.features)):
-			if isinstance(self.features[pos], nn.Conv2d):
-				if thresholds:
-					self.threshold.update({'t'+str(pos): nn.Parameter(torch.tensor(thresholds.pop(0)*self.scaling_factor))})
-				#print('\t Layer{} : {:.2f}'.format(pos, self.threshold[pos]))
+			for pos in range(len(self.features)):
+				if isinstance(self.features[pos], nn.Conv2d):
+					if thresholds:
+						self.threshold.update({'t'+str(t)+str(pos): nn.Parameter(torch.tensor(thresholds.pop(0)*self.scaling_factor))})
+					#print('\t Layer{} : {:.2f}'.format(pos, self.threshold[pos]))
 
-		prev = len(self.features)
+			prev = len(self.features)
 
-		for pos in range(len(self.classifier)-1):
-			if isinstance(self.classifier[pos], nn.Linear):
-				if thresholds:
-					self.threshold.update({'t'+str(prev+pos): nn.Parameter(torch.tensor(thresholds.pop(0)*self.scaling_factor))})
-				#print('\t Layer{} : {:.2f}'.format(prev+pos, self.threshold[prev+pos]))
+			for pos in range(len(self.classifier)-1):
+				if isinstance(self.classifier[pos], nn.Linear):
+					if thresholds:
+						self.threshold.update({'t'+str(t)+str(prev+pos): nn.Parameter(torch.tensor(thresholds.pop(0)*self.scaling_factor))})
+					#print('\t Layer{} : {:.2f}'.format(prev+pos, self.threshold[prev+pos]))
 
 
 	def _make_layers(self, cfg):
@@ -134,9 +143,11 @@ class VGG_SNN(nn.Module):
 			
 			else:
 				layers += [nn.Conv2d(in_channels, x, kernel_size=self.kernel_size, padding=(self.kernel_size-1)//2, stride=stride, bias=False),
-							nn.ReLU(inplace=True)
+                           SeparatedBatchNorm1d(num_features=x, max_length=self.timesteps),
+						   nn.ReLU(inplace=True)
 							]
-				layers += [nn.Dropout(self.dropout)]
+
+				# layers += [nn.Dropout(self.dropout)]
 				in_channels = x
 
 		features = nn.Sequential(*layers)
@@ -145,25 +156,25 @@ class VGG_SNN(nn.Module):
 		if self.dataset == 'IMAGENET':
 			layers += [nn.Linear(512*7*7, 4096, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
-			layers += [nn.Dropout(self.dropout)]
+			# layers += [nn.Dropout(self.dropout)]
 			layers += [nn.Linear(4096, 4096, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
-			layers += [nn.Dropout(self.dropout)]
+			# layers += [nn.Dropout(self.dropout)]
 			layers += [nn.Linear(4096, self.labels, bias=False)]
 
 		elif self.vgg_name == 'VGG6' and self.dataset != 'MNIST':
 			layers += [nn.Linear(512*4*4, 4096, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
-			layers += [nn.Dropout(self.dropout)]
+			# layers += [nn.Dropout(self.dropout)]
 			layers += [nn.Linear(4096, 4096, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
-			layers += [nn.Dropout(self.dropout)]
+			# layers += [nn.Dropout(self.dropout)]
 			layers += [nn.Linear(4096, self.labels, bias=False)]
 
 		elif self.vgg_name == 'VGG4' and self.dataset== 'MNIST':
 			layers += [nn.Linear(128*7*7, 1024, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
-			layers += [nn.Dropout(self.dropout)]
+			# layers += [nn.Dropout(self.dropout)]
 			#layers += [nn.Linear(4096, 4096, bias=False)]
 			#layers += [nn.ReLU(inplace=True)]
 			#layers += [nn.Dropout(self.dropout)]
@@ -172,28 +183,28 @@ class VGG_SNN(nn.Module):
 		elif self.vgg_name != 'VGG6' and self.dataset != 'MNIST':
 			layers += [nn.Linear(512*2*2, 4096, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
-			layers += [nn.Dropout(self.dropout)]
+			# layers += [nn.Dropout(self.dropout)]
 			layers += [nn.Linear(4096, 4096, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
-			layers += [nn.Dropout(self.dropout)]
+			# layers += [nn.Dropout(self.dropout)]
 			layers += [nn.Linear(4096, self.labels, bias=False)]
 		
 		elif self.vgg_name == 'VGG6' and self.dataset == 'MNIST':
 			layers += [nn.Linear(128*7*7, 4096, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
-			layers += [nn.Dropout(self.dropout)]
+			# layers += [nn.Dropout(self.dropout)]
 			layers += [nn.Linear(4096, 4096, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
-			layers += [nn.Dropout(self.dropout)]
+			# layers += [nn.Dropout(self.dropout)]
 			layers += [nn.Linear(4096, self.labels, bias=False)]
 
 		elif self.vgg_name != 'VGG6' and self.dataset == 'MNIST':
 			layers += [nn.Linear(512*1*1, 4096, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
-			layers += [nn.Dropout(self.dropout)]
+			# layers += [nn.Dropout(self.dropout)]
 			layers += [nn.Linear(4096, 4096, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
-			layers += [nn.Dropout(self.dropout)]
+			# layers += [nn.Dropout(self.dropout)]
 			layers += [nn.Linear(4096, self.labels, bias=False)]
 
 
@@ -217,14 +228,14 @@ class VGG_SNN(nn.Module):
 			if isinstance(self.features[l], nn.Conv2d):
 				self.mem[l] 		= torch.zeros(self.batch_size, self.features[l].out_channels, self.width, self.height)
 			
-			elif isinstance(self.features[l], nn.ReLU):
-				if isinstance(self.features[l-1], nn.Conv2d):
-					self.spike[l] 	= torch.ones(self.mem[l-1].shape)*(-1000)
-				elif isinstance(self.features[l-1], nn.AvgPool2d):
-					self.spike[l] 	= torch.ones(self.batch_size, self.features[l-2].out_channels, self.width, self.height)*(-1000)
+			# elif isinstance(self.features[l], nn.ReLU):
+			# 	if isinstance(self.features[l-2], nn.Conv2d):
+			# 		self.spike[l] 	= torch.ones(self.mem[l-2].shape)*(-1000)
+			# 	elif isinstance(self.features[l-1], nn.AvgPool2d):
+			# 		self.spike[l] 	= torch.ones(self.batch_size, self.features[l-2].out_channels, self.width, self.height)*(-1000)
 
-			elif isinstance(self.features[l], nn.Dropout):
-				self.mask[l] = self.features[l](torch.ones(self.mem[l-2].shape).cuda())
+			# elif isinstance(self.features[l], nn.Dropout):
+			# 	self.mask[l] = self.features[l](torch.ones(self.mem[l-2].shape).cuda())
 
 			elif isinstance(self.features[l], nn.AvgPool2d):
 				self.width = self.width//self.features[l].kernel_size
@@ -237,18 +248,13 @@ class VGG_SNN(nn.Module):
 			if isinstance(self.classifier[l], nn.Linear):
 				self.mem[prev+l] 		= torch.zeros(self.batch_size, self.classifier[l].out_features)
 			
-			elif isinstance(self.classifier[l], nn.ReLU):
-				self.spike[prev+l] 		= torch.ones(self.mem[prev+l-1].shape)*(-1000)
+			# elif isinstance(self.classifier[l], nn.ReLU):
+			# 	self.spike[prev+l] 		= torch.ones(self.mem[prev+l-1].shape)*(-1000)
 
-			elif isinstance(self.classifier[l], nn.Dropout):
-				self.mask[prev+l] = self.classifier[l](torch.ones(self.mem[prev+l-2].shape).cuda())
+			# elif isinstance(self.classifier[l], nn.Dropout):
+			# 	self.mask[prev+l] = self.classifier[l](torch.ones(self.mem[prev+l-2].shape).cuda())
 				
-		
-	def percentile(self, t, q):
 
-		k = 1 + round(.01 * float(q) * (t.numel() - 1))
-		result = t.view(-1).kthvalue(k).values.item()
-		return result
 		
 	def forward(self, x, find_max_mem=False, max_mem_layer=0):
 		
@@ -268,21 +274,22 @@ class VGG_SNN(nn.Module):
 							max_mem = torch.tensor([cur])
 						break
 					
-					mem_thr 		= (self.mem[l]/getattr(self.threshold, 't'+str(l))) - 1.0
-					rst 			= getattr(self.threshold, 't'+str(l)) * (mem_thr>0).float()
-					self.mem[l] 	= getattr(self.leak, 'l'+str(l)) *self.mem[l] + self.features[l](out_prev) - rst
+					mem_thr 		= (self.mem[l]/getattr(self.threshold, 't'+str(t)+str(l))) - 1.0
+					rst 			= getattr(self.threshold, 't'+str(t)+str(l)) * (mem_thr>0).float()
+					self.mem[l] 	= getattr(self.leak, 'l'+str(t)+str(l)) *self.mem[l] + self.features[l+1](self.features[l](out_prev),t) - rst
+					
 									
 				elif isinstance(self.features[l], nn.ReLU):
 					
-					out 			= self.act_func(mem_thr, (t-1-self.spike[l]))
-					self.spike[l] 	= self.spike[l].masked_fill(out.bool(),t-1)
+					out 			= self.act_func(mem_thr)
+					# self.spike[l] 	= self.spike[l].masked_fill(out.bool(),t-1)
 					out_prev  		= out.clone()
 
 				elif isinstance(self.features[l], nn.AvgPool2d):
 					out_prev 		= self.features[l](out_prev)
 				
-				elif isinstance(self.features[l], nn.Dropout):
-					out_prev 		= out_prev * self.mask[l]
+				# elif isinstance(self.features[l], nn.Dropout):
+				# 	out_prev 		= out_prev * self.mask[l]
 			
 			if find_max_mem and max_mem_layer<len(self.features):
 				continue
@@ -300,17 +307,17 @@ class VGG_SNN(nn.Module):
 							max_mem = torch.tensor([cur])
 						break
 
-					mem_thr 			= (self.mem[prev+l]/getattr(self.threshold, 't'+str(prev+l))) - 1.0
-					rst 				= getattr(self.threshold,'t'+str(prev+l)) * (mem_thr>0).float()
-					self.mem[prev+l] 	= getattr(self.leak, 'l'+str(prev+l)) * self.mem[prev+l] + self.classifier[l](out_prev) - rst
+					mem_thr 			= (self.mem[prev+l]/getattr(self.threshold, 't'+str(t)+str(prev+l))) - 1.0
+					rst 				= getattr(self.threshold,'t'+str(t)+str(prev+l)) * (mem_thr>0).float()
+					self.mem[prev+l] 	= getattr(self.leak, 'l'+str(t)+str(prev+l)) * self.mem[prev+l] + self.classifier[l](out_prev) - rst
 				
 				elif isinstance(self.classifier[l], nn.ReLU):
-					out 				= self.act_func(mem_thr, (t-1-self.spike[prev+l]))
-					self.spike[prev+l] 	= self.spike[prev+l].masked_fill(out.bool(),t-1)
+					out 				= self.act_func(mem_thr)
+					# self.spike[prev+l] 	= self.spike[prev+l].masked_fill(out.bool(),t-1)
 					out_prev  			= out.clone()
 
-				elif isinstance(self.classifier[l], nn.Dropout):
-					out_prev 		= out_prev * self.mask[prev+l]
+				# elif isinstance(self.classifier[l], nn.Dropout):
+				# 	out_prev 		= out_prev * self.mask[prev+l]
 			
 			# Compute the classification layer outputs
 			if not find_max_mem:

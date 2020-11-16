@@ -1,1 +1,2 @@
 ann_resnet20_cifar10_no_bias_full_train.pth cifar10 09304 300回
+resnet_spiking_batch_norm_type4.pycifar10  09127 200回 lr 0.0002
