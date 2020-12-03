@@ -180,7 +180,7 @@ if __name__ == '__main__':
     parser.add_argument('--pretrained_ann',         default='',                 type=str,       help='pretrained model to initialize ANN')
     parser.add_argument('--test_only',              action='store_true',                        help='perform only inference')
     parser.add_argument('--epochs',                 default=300,                type=int,       help='number of training epochs')
-    parser.add_argument('--lr_interval',            default='0.40 0.60 0.80',   type=str,       help='intervals at which to reduce lr, expressed as %%age of total epochs')
+    parser.add_argument('--lr_interval',            default='0.50 0.60 0.80',   type=str,       help='intervals at which to reduce lr, expressed as %%age of total epochs')
     parser.add_argument('--lr_reduce',              default=10,                 type=int,       help='reduction factor for learning rate')
     parser.add_argument('--optimizer',              default='SGD',             type=str,        help='optimizer for SNN backpropagation', choices=['SGD', 'Adam'])
     parser.add_argument('--dropout',                default=0.2,                type=float,     help='dropout percentage for conv layers')

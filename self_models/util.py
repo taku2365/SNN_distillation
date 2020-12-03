@@ -72,6 +72,30 @@ class SeparatedBatchNorm1d(nn.Module):
 
 
 
+class LinearSpike1(torch.autograd.Function):
+    """
+    Here we use the piecewise-linear surrogate gradient as was done
+    in Bellec et al. (2018).
+    """
+    gamma = 0.3 # Controls the dampening of the piecewise-linear surrogate gradient
+
+    @staticmethod
+    def forward(ctx, input):
+        
+        ctx.save_for_backward(input)
+        out = torch.zeros_like(input).cuda()
+        out[input > 0] = 1.0
+        return out
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        
+        input,     = ctx.saved_tensors
+        grad_input = grad_output.clone()
+        grad       = LinearSpike.gamma*F.threshold(1.0-torch.abs(input), 0, 0)
+        return grad*grad_input, None
+
+
 class LinearSpike(torch.autograd.Function):
     """
     Here we use the piecewise-linear surrogate gradient as was done
@@ -94,6 +118,9 @@ class LinearSpike(torch.autograd.Function):
         grad_input = grad_output.clone()
         grad       = LinearSpike.gamma*F.threshold(1.0-torch.abs(input), 0, 0)
         return grad*grad_input, None
+
+
+
 
 	
 if __name__ == "__main__":

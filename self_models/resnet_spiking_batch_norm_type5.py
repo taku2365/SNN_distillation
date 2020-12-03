@@ -1,8 +1,11 @@
-##### form batch_norm ann to bstch_norm rnn layer + threshold has each time value
+##### form batch_norm ann to bstch_norm rnn layer + threshold has 4 thresholds
 ##python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.1 --scaling_factor 0.3  --weight_decay 0.0 --pretrained_ann trained_models/ann_resnet20_cifar10_batch_on.pth  --lr_interval '0.10 0.40 0.70' --lr_reduce 5  --thresholds_new True --store_name batch_type3 --lr_interval '0.10 0.40 0.70' --lr_reduce 5 --timesteps 25                      
 ##python3 snn_only.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.1 --scaling_factor 0.3  --weight_decay 0.0  --store_name batch_type3 --lr_interval '0.15 0.40 0.70' --lr_reduce 5 --timesteps 25  --epoch 500 -lr 0.002              
-## python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.3 --scaling_factor 0.3  --weight_decay 0.0 --pretrained_snn trained_models/snn_resnet20_batch_norm_cifar10_40__batch_type4_dropout03_epoch150_fixbug.pth --lr_reduce 5  --store_name batch_type3_dropout03 --lr_interval '0.10 0.40 0.70' --lr_reduce 5 --timesteps 25  --epochs 500 -lr 0.002 --test_only
+## python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.3 --scaling_factor 0.3  --weight_decay 0.0 --pretrained_snn trained_models/snn_resnet20_batch_norm_cifar10_40_lr0.005_batch_type5_t_divide5.pth --lr_reduce 10 --timesteps 40 -lr 0.005 --store_name batch_type5_retrain --lr_interval '0.10 0.40 0.70' --t_divide 5 --lr_reduce 5 --timesteps 40  --epochs 500  --retrain True
 ## python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.3 --scaling_factor 0.3  --weight_decay 0.0  --lr_reduce 10  --store_name batch_type4_dropout03_epoch150 --lr_interval '0.3 0.60 0.70' --lr_reduce 5 --timesteps 40  --epochs 500 -lr 0.01 --default_threshold 1
+#python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.3 --scaling_factor 0.3  --weight_decay 0.0  --lr_reduce 10  --store_name batch_type5 --lr_interval '0.3 0.60 0.70' --lr_reduce 10 --timesteps 40  --epochs 500 -lr 0.002 --default_threshold 1 --t_divide 5
+#python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.3 --scaling_factor 0.3  --weight_decay 0.0  --lr_reduce 10  --store_name batch_type5 --lr_interval '0.3 0.60 0.70' --lr_reduce 10 --timesteps 40  --epochs 500 -lr 0.002 --default_threshold 1 --t_divide 10
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -97,7 +100,7 @@ class LinearSpike(torch.autograd.Function):
     gamma = 0.3 # Controls the dampening of the piecewise-linear surrogate gradient
 
     @staticmethod
-    def forward(ctx, input, last_spike):
+    def forward(ctx, input):
         
         ctx.save_for_backward(input)
         out = torch.zeros_like(input).cuda()
@@ -110,7 +113,7 @@ class LinearSpike(torch.autograd.Function):
         input,     = ctx.saved_tensors
         grad_input = grad_output.clone()
         grad       = LinearSpike.gamma*F.threshold(1.0-torch.abs(input), 0, 0)
-        return grad*grad_input, None
+        return grad*grad_input
 
 class BasicBlock(nn.Module):
 	expansion = 1
@@ -171,37 +174,38 @@ class BasicBlock(nn.Module):
 		mask 			= dic['mask']
 		threshold 		= dic['threshold']
 		t 				= dic['t']
+		t_th 		    = dic['t_th']
 		leak			= dic['leak']
 		find_max_mem 	= dic['find_max_mem']
 		inp				= out_prev.clone()
-		
+		# print(t)
 		#conv1
-		mem_thr 		= (mem[pos]/getattr(threshold,'t'+str(t)+'_' +str(pos))) - 1.0
-		rst 			= getattr(threshold,'t'+str(t)+'_' + str(pos)) * (mem_thr>0).float()
+		mem_thr 		= (mem[pos]/getattr(threshold,'t'+str(t_th).zfill(2)+'_' +str(pos).zfill(2))) - 1.0
+		rst 			= getattr(threshold,'t'+str(t_th).zfill(2)+'_' + str(pos).zfill(2)) * (mem_thr>0).float()
 		residual_batch  = self.residual_batch0(self.residual[0](inp),t) if not find_max_mem else self.residual[0](inp)
-		mem[pos] 		= getattr(leak, 'l'+str(t)+'_'+str(pos)) *mem[pos] + residual_batch - rst
+		mem[pos] 		= getattr(leak, 'l'+str(t_th).zfill(2)+'_'+str(pos).zfill(2)) *mem[pos] + residual_batch - rst
 
 		#batch normalization
 
 
 		#relu1
-		out 			= act_func(mem_thr, (t-1-spike[pos]))
-		spike[pos] 		= spike[pos].masked_fill(out.bool(),t-1)
+		out 			= act_func(mem_thr)
+		# spike[pos] 		= spike[pos].masked_fill(out.bool(),t-1)
 		out_prev  		= out.clone()
 
 		#dropout1
 		out_prev 		= out_prev * mask[pos]
 		
 		#conv2+identity
-		mem_thr 		= (mem[pos+1]/getattr(threshold, 't'+str(t)+'_'+str(pos+1))) - 1.0
-		rst 			= getattr(threshold, 't'+str(t)+'_'+str(pos+1)) * (mem_thr>0).float()
+		mem_thr 		= (mem[pos+1]/getattr(threshold, 't'+str(t_th).zfill(2)+'_'+str(pos+1))) - 1.0
+		rst 			= getattr(threshold, 't'+str(t_th).zfill(2)+'_'+str(pos+1)) * (mem_thr>0).float()
 		residual_batch  = self.residual_batch3(self.residual[3](out_prev),t)
 		identity  = self.identity_batch(self.identity(inp),t) if self.identity_conv_flag else self.identity(inp)
 		identity =  identity if not find_max_mem else self.identity(inp)
-		mem[pos+1] 		= getattr(leak,'l'+str(t)+'_'+str(pos+1))*mem[pos+1] + residual_batch + identity - rst
+		mem[pos+1] 		= getattr(leak,'l'+str(t_th).zfill(2)+'_'+str(pos+1))*mem[pos+1] + residual_batch + identity - rst
 
 		#relu2
-		out 			= act_func(mem_thr, (t-1-spike[pos+1]))
+		out 			= act_func(mem_thr)
 		spike[pos+1]	= spike[pos+1].masked_fill(out.bool(),t-1)
 		out_prev  		= out.clone()
 
@@ -211,7 +215,7 @@ class RESNET_SNN_BATCH_NORM(nn.Module):
 	
     #all_layers = []
     #drop 		= 0.2
-    def __init__(self, resnet_name, activation='Linear', labels=10, timesteps=75, leak=1.0, default_threshold=1, dropout=0.2, dataset='CIFAR10',batch_flag=False,bias=False):
+    def __init__(self, resnet_name, activation='Linear', labels=10, timesteps=75, leak=1.0, default_threshold=1, dropout=0.2, dataset='CIFAR10',batch_flag=False,bias=False,t_divede=5):
 
         super().__init__()
         
@@ -225,6 +229,7 @@ class RESNET_SNN_BATCH_NORM(nn.Module):
         self.mask 			         = {}
         self.spike 			         = {}
         self.pre_process_batch_norm  = {}
+        self.t_divide                = t_divede
 
 
         
@@ -290,10 +295,14 @@ class RESNET_SNN_BATCH_NORM(nn.Module):
         lk 			= {}
 
         for t in range(self.timesteps):
+
+            t = int(t//self.t_divide)
+            # print(t)
+
             for l in range(len(self.pre_process)):
                 if isinstance(self.pre_process[l],nn.Conv2d):
-                    threshold['t'+str(t)+'_'+str(l)] 	= nn.Parameter(torch.tensor(default_threshold))
-                    lk['l'+str(t)+'_'+str(l)] 	  		= nn.Parameter(torch.tensor(leak))
+                    threshold['t'+str(t).zfill(2)+'_'+str(l).zfill(2)] 	= nn.Parameter(torch.tensor(default_threshold))
+                    lk['l'+str(t).zfill(2)+'_'+str(l).zfill(2)] 	  		= nn.Parameter(torch.tensor(leak))
 
             pos = len(self.pre_process)
                     
@@ -303,17 +312,27 @@ class RESNET_SNN_BATCH_NORM(nn.Module):
                 for index in range(len(layer)):
                     for l in range(len(layer[index].residual)):
                         if isinstance(layer[index].residual[l],nn.Conv2d):
-                            threshold['t'+str(t)+'_'+str(pos)] = nn.Parameter(torch.tensor(default_threshold))
-                            lk['l'+str(t)+'_'+str(pos)] 		= nn.Parameter(torch.tensor(leak))
+                            threshold['t'+str(t).zfill(2)+'_'+str(pos).zfill(2)] = nn.Parameter(torch.tensor(default_threshold))
+                            lk['l'+str(t).zfill(2)+'_'+str(pos).zfill(2)] 		= nn.Parameter(torch.tensor(leak))
                             pos=pos+1
 
             for l in range(len(self.classifier)-1):
                 if isinstance(self.classifier[l], nn.Linear):
-                    threshold['t'+str(t)+'_'+str(pos+l)] 		= nn.Parameter(torch.tensor(default_threshold))
-                    lk['l'+str(t)+'_'+str(pos+l)] 				= nn.Parameter(torch.tensor(leak)) 
+                    threshold['t'+str(t).zfill(2)+'_'+str(pos+l).zfill(2)] 		= nn.Parameter(torch.tensor(default_threshold))
+                    lk['l'+str(t).zfill(2)+'_'+str(pos+l).zfill(2)] 				= nn.Parameter(torch.tensor(leak)) 
                     
             self.threshold 	= nn.ParameterDict(threshold)
             self.leak 		= nn.ParameterDict(lk)
+
+
+        
+        threshold_length = 0
+
+        for key, value in self.threshold.items():
+            threshold_length += 1
+
+
+        print(threshold_length)
 
 		
 		
@@ -340,30 +359,30 @@ class RESNET_SNN_BATCH_NORM(nn.Module):
                 if m.bias is not None:
                     m.bias.data.zero_()
 
-    def threshold_update(self, scaling_factor=1.0, thresholds=[]):
+    # def threshold_update(self, scaling_factor=1.0, thresholds=[]):
         
-        self.scaling_factor = scaling_factor
+    #     self.scaling_factor = scaling_factor
 
-        for t in range(self.timesteps):			
-            for pos in range(len(self.pre_process)):
-                if isinstance(self.pre_process[pos],nn.Conv2d):
-                    if thresholds:
-                        self.threshold.update({'t'+str(t)+'_'+str(pos): nn.Parameter(torch.tensor(thresholds.pop(0)*self.scaling_factor))})
+    #     for t in range(self.timesteps):			
+    #         for pos in range(len(self.pre_process)):
+    #             if isinstance(self.pre_process[pos],nn.Conv2d):
+    #                 if thresholds:
+    #                     self.threshold.update({'t'+str(t).zfill(2)+'_'+str(pos).zfill(2): nn.Parameter(torch.tensor(thresholds.pop(0)*self.scaling_factor))})
 
-        pos = len(self.pre_process)
-        for i in range(1,5):
-            layer = self.layers[i]
-            for index in range(len(layer)):
-                for l in range(len(layer[index].residual)):
-                    if isinstance(layer[index].residual[l],nn.Conv2d):
+    #     pos = len(self.pre_process)
+    #     for i in range(1,5):
+    #         layer = self.layers[i]
+    #         for index in range(len(layer)):
+    #             for l in range(len(layer[index].residual)):
+    #                 if isinstance(layer[index].residual[l],nn.Conv2d):
                         
-                        pos = pos+1
+    #                     pos = pos+1
 
-        for t in range(self.timesteps):
-            for l in range(len(self.classifier)):
-                if isinstance(self.classifier[l], nn.Linear):
-                    if thresholds:
-                        self.threshold.update({'t'+str(t)+'_'+str(pos+l): nn.Parameter(torch.tensor(thresholds.pop(0)*self.scaling_factor))})
+    #     for t in range(self.timesteps):
+    #         for l in range(len(self.classifier)):
+    #             if isinstance(self.classifier[l], nn.Linear):
+    #                 if thresholds:
+    #                     self.threshold.update({'t'+str(t).zfill(2)+'_'+str(pos+l).zfill(2): nn.Parameter(torch.tensor(thresholds.pop(0)*self.scaling_factor))})
 			
 
     def _make_layer(self, block, planes, num_blocks, stride, dropout,batch_flag,bias,timesteps):
@@ -436,7 +455,16 @@ class RESNET_SNN_BATCH_NORM(nn.Module):
             
         max_mem = 0.0
         #pdb.set_trace()
+
         for t in range(self.timesteps):
+            
+            t_th = int(t//self.t_divide)
+
+            # print(t_th)
+
+
+
+            
 
             out_prev = x
                     
@@ -451,14 +479,14 @@ class RESNET_SNN_BATCH_NORM(nn.Module):
                             max_mem = torch.tensor([cur])
                         break
 
-                    mem_thr 		= (self.mem[l]/getattr(self.threshold,'t'+str(t)+'_'+str(l))) - 1.0
-                    rst 			= getattr(self.threshold, 't'+str(t)+'_'+str(l)) * (mem_thr>0).float()
+                    mem_thr 		= (self.mem[l]/getattr(self.threshold,'t'+str(t_th).zfill(2)+'_'+str(l).zfill(2))) - 1.0
+                    rst 			= getattr(self.threshold, 't'+str(t_th).zfill(2)+'_'+str(l).zfill(2)) * (mem_thr>0).float()
                     pre_process_conv_batch = self.pre_process_batch_norm[l](self.pre_process[l](out_prev),t) if not find_max_mem else self.pre_process[l](out_prev)
-                    self.mem[l] 	= getattr(self.leak, 'l'+str(t)+'_'+str(l)) *self.mem[l] + pre_process_conv_batch- rst
+                    self.mem[l] 	= getattr(self.leak, 'l'+str(t_th).zfill(2)+'_'+str(l).zfill(2)) *self.mem[l] + pre_process_conv_batch- rst
                     
                 elif isinstance(self.pre_process[l], nn.ReLU):
-                    out 			= self.act_func(mem_thr, (t-1-self.spike[l-1]))
-                    self.spike[l-1] = self.spike[l-1].masked_fill(out.bool(),t-1)
+                    out 			= self.act_func(mem_thr)
+                    # self.spike[l-1] = self.spike[l-1].masked_fill(out.bool(),t-1)
                     out_prev  		= out.clone()
 
                 elif isinstance(self.pre_process[l], nn.AvgPool2d):
@@ -480,7 +508,7 @@ class RESNET_SNN_BATCH_NORM(nn.Module):
             for i in range(1,5):
                 layer = self.layers[i]
                 for index in range(len(layer)):
-                    out_prev = layer[index]({'out_prev':out_prev.clone(), 'pos': pos, 'act_func': self.act_func, 'mem':self.mem, 'spike':self.spike, 'mask':self.mask, 'threshold':self.threshold, 't': t, 'leak':self.leak ,'find_max_mem':find_max_mem})
+                    out_prev = layer[index]({'out_prev':out_prev.clone(), 'pos': pos, 'act_func': self.act_func, 'mem':self.mem, 'spike':self.spike, 'mask':self.mask, 'threshold':self.threshold, 't': t, 't_th': t_th,'leak':self.leak ,'find_max_mem':find_max_mem})
                     pos = pos+2
             
             #out_prev = self.avgpool(out_prev)
@@ -494,11 +522,11 @@ class RESNET_SNN_BATCH_NORM(nn.Module):
                             max_mem = (self.classifier[l](out_prev)).max()
                         break
 
-                    mem_thr 			= (self.mem[pos+l]/getattr(self.threshold,'t'+str(t)+'_'+str(pos+l))) - 1.0
-                    out 				= self.act_func(mem_thr, (t-1-self.spike[pos+l]))
-                    rst 				= getattr(self.threshold, 't'+str(t)+'_'+str(pos+l)) * (mem_thr>0).float()
+                    mem_thr 			= (self.mem[pos+l]/getattr(self.threshold,'t'+str(t_th).zfill(2)+'_'+str(pos+l).zfill(2))) - 1.0
+                    out 				= self.act_func(mem_thr)
+                    rst 				= getattr(self.threshold, 't'+str(t_th).zfill(2)+'_'+str(pos+l).zfill(2)) * (mem_thr>0).float()
                     self.spike[pos+l] 	= self.spike[pos+l].masked_fill(out.bool(),t-1)
-                    self.mem[pos+l] 	= getattr(self.leak, 'l'+str(t)+'_'+str(pos+l))*self.mem[pos+l] + self.classifier[l](out_prev) - rst
+                    self.mem[pos+l] 	= getattr(self.leak, 'l'+str(t_th).zfill(2)+'_'+str(pos+l).zfill(2))*self.mem[pos+l] + self.classifier[l](out_prev) - rst
                     out_prev  			= out.clone()
 
                 elif isinstance(self.classifier[l], nn.Dropout):

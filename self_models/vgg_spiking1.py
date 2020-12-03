@@ -1,9 +1,6 @@
 #---------------------------------------------------
 # Imports
 #---------------------------------------------------
-
-#python snn.py --dataset CIFAR10 --epoch 300 --batch_size 64 --architecture VGG16 --learning_rate 1e-4 --epochs 10 --lr_interval '0.60 0.80 0.90' --lr_reduce 5 --timesteps 10 --leak 1.0 --scaling_factor 0.6 --optimizer Adam --weight_decay 0 --momentum 0 --amsgrad True --dropout 0.1 --train_acc_batches 50 --default_threshold 1.0 --pretrained_ann trained_models/ann_vgg16_cifar10_best_model1.pth
-#python snn.py --dataset CIFAR100 --epoch 300 --batch_size 64 --architecture VGG16 --learning_rate 1e-4 --epochs 10 --lr_interval '0.60 0.80 0.90' --lr_reduce 5 --timesteps 10 --leak 1.0 --scaling_factor 0.6 --optimizer Adam --weight_decay 0 --momentum 0 --amsgrad True --dropout 0.1 --train_acc_batches 50 --default_threshold 1.0 --pretrained_ann trained_models/ann_vgg16_cifar100_best_model.pth
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -16,13 +13,12 @@ import copy
 
 cfg = {
 	'VGG4' : [64, 'A', 128, 'A'],
-    'VGG5' : [64, 'A', 128, 128, 'A'],
+    'VGG6' : [64, 'A', 128, 128, 'A'],
     'VGG9':  [64, 'A', 128, 256, 'A', 256, 512, 'A', 512, 'A', 512],
     'VGG11': [64, 'A', 128, 256, 'A', 512, 512, 'A', 512, 'A', 512, 512],
     'VGG13': [64, 64, 'A', 128, 128, 'A', 256, 256, 'A', 512, 512, 512, 'A', 512],
     'VGG16': [64, 64, 'A', 128, 128, 'A', 256, 256, 256, 'A', 512, 512, 512, 'A', 512, 512, 512],
-    'VGG19': [64, 64, 'A', 128, 128, 'A', 256, 256, 256, 256, 'A', 512, 512, 512, 512, 'A', 512, 512, 512, 512],
-    'CIFARNET': [128, 256, 'A', 512, 'A', 1204, 512]
+    'VGG19': [64, 64, 'A', 128, 128, 'A', 256, 256, 256, 256, 'A', 512, 512, 512, 512, 'A', 512, 512, 512, 512]
 }
 
 class LinearSpike(torch.autograd.Function):
@@ -50,25 +46,16 @@ class LinearSpike(torch.autograd.Function):
 
 class VGG_SNN_STDB(nn.Module):
 
-	def __init__(self, vgg_name, activation='Linear', labels=10, timesteps=100, leak=1.0, default_threshold = 1.0, dropout=0.2, kernel_size=3, dataset='CIFAR10', individual_thresh=False, vmem_drop=0):
+	def __init__(self, vgg_name, activation='Linear', labels=10, timesteps=100, leak=1.0, default_threshold = 1.0, dropout=0.2, kernel_size=3, dataset='CIFAR10'):
 		super().__init__()
 		
 		self.vgg_name 		= vgg_name
-		if activation == 'Linear':
-			self.act_func 	= LinearSpike.apply
-		elif activation == 'STDB':
-			self.act_func	= STDB.apply
+		self.act_func 		= LinearSpike.apply
 		self.labels 		= labels
 		self.timesteps 		= timesteps
-		#STDB.alpha 		 	= alpha
-		#STDB.beta 			= beta 
 		self.dropout 		= dropout
 		self.kernel_size 	= kernel_size
 		self.dataset 		= dataset
-		self.individual_thresh = individual_thresh
-		self.vmem_drop 		= vmem_drop
-		#self.threshold 		= nn.ParameterDict()
-		#self.leak 			= nn.ParameterDict()
 		self.mem 			= {}
 		self.mask 			= {}
 		self.spike 			= {}
@@ -79,44 +66,18 @@ class VGG_SNN_STDB(nn.Module):
 
 		threshold 	= {}
 		lk 	  		= {}
-		if self.dataset in ['CIFAR10', 'CIFAR100']:
-			width = 32
-			height = 32
-		elif self.dataset=='MNIST':
-			width = 28
-			height = 28
-		elif self.dataset=='IMAGENET':
-			width = 224
-			height = 224
-
 		for l in range(len(self.features)):
 			if isinstance(self.features[l], nn.Conv2d):
-				if self.individual_thresh:
-					threshold['t'+str(l)] 	= nn.Parameter(torch.ones(self.features[l].out_channels, width, height)*default_threshold)
-					lk['l'+str(l)] 			= nn.Parameter(torch.ones(self.features[l].out_channels, width, height)*leak)
-				else:
-					threshold['t'+str(l)] 	= nn.Parameter(torch.tensor(default_threshold))
-					lk['l'+str(l)]			= nn.Parameter(torch.tensor(leak))
-				#threshold['t'+str(l)] 	= nn.Parameter(torch.empty(1,1).fill_(default_threshold))
-				#lk['l'+str(l)]			= nn.Parameter(torch.empty(1,1).fill_(leak))
-			elif isinstance(self.features[l], nn.AvgPool2d):
-				width 	= width//self.features[l].kernel_size
-				height 	= height//self.features[l].kernel_size
-				
+				threshold['t'+str(l)] 	= nn.Parameter(torch.tensor(default_threshold))
+				lk['l'+str(l)]			= nn.Parameter(torch.tensor(leak))
+								
 				
 		prev = len(self.features)
 		for l in range(len(self.classifier)-1):
 			if isinstance(self.classifier[l], nn.Linear):
-				if self.individual_thresh:
-					threshold['t'+str(prev+l)]	= nn.Parameter(torch.ones(self.classifier[l].out_features)*default_threshold)
-					lk['l'+str(prev+l)] 		= nn.Parameter(torch.ones(self.classifier[l].out_features)*leak)
-				else:
-					threshold['t'+str(prev+l)] 	= nn.Parameter(torch.tensor(default_threshold))
-					lk['l'+str(prev+l)] 		= nn.Parameter(torch.tensor(leak))
-				#threshold['t'+str(prev+l)] 	= nn.Parameter(torch.empty(1,1).fill_(default_threshold))
-				#lk['l'+str(prev+l)] 		= nn.Parameter(torch.empty(1,1).fill_(leak))
-
-		#pdb.set_trace()
+				threshold['t'+str(prev+l)] 	= nn.Parameter(torch.tensor(default_threshold))
+				lk['l'+str(prev+l)] 		= nn.Parameter(torch.tensor(leak))
+				
 		self.threshold 	= nn.ParameterDict(threshold)
 		self.leak 		= nn.ParameterDict(lk)
 		
@@ -142,37 +103,18 @@ class VGG_SNN_STDB(nn.Module):
 		# Initialize thresholds
 		self.scaling_factor = scaling_factor
 		
-		if self.dataset in ['CIFAR10', 'CIFAR100']:
-			width = 32
-			height = 32
-		elif self.dataset=='MNIST':
-			width = 28
-			height = 28
-		elif self.dataset=='IMAGENET':
-			width = 224
-			height = 224
-
 		for pos in range(len(self.features)):
 			if isinstance(self.features[pos], nn.Conv2d):
 				if thresholds:
-					if self.individual_thresh:
-						self.threshold.update({'t'+str(pos): nn.Parameter(torch.ones(self.features[pos].out_channels, width, height)*thresholds.pop(0)*self.scaling_factor)})
-					else:
-						self.threshold.update({'t'+str(pos): nn.Parameter(torch.tensor(thresholds.pop(0))*self.scaling_factor)})
+					self.threshold.update({'t'+str(pos): nn.Parameter(torch.tensor(thresholds.pop(0)*self.scaling_factor))})
 				#print('\t Layer{} : {:.2f}'.format(pos, self.threshold[pos]))
-			elif isinstance(self.features[pos], nn.AvgPool2d):
-				width 	= width//self.features[pos].kernel_size
-				height 	= height//self.features[pos].kernel_size
 
 		prev = len(self.features)
 
 		for pos in range(len(self.classifier)-1):
 			if isinstance(self.classifier[pos], nn.Linear):
 				if thresholds:
-					if self.individual_thresh:
-						self.threshold.update({'t'+str(prev+pos): nn.Parameter(torch.ones(self.classifier[pos].out_features)*thresholds.pop(0)*self.scaling_factor)})
-					else:
-						self.threshold.update({'t'+str(prev+pos): nn.Parameter(torch.tensor(thresholds.pop(0))*self.scaling_factor)})
+					self.threshold.update({'t'+str(prev+pos): nn.Parameter(torch.tensor(thresholds.pop(0)*self.scaling_factor))})
 				#print('\t Layer{} : {:.2f}'.format(prev+pos, self.threshold[prev+pos]))
 
 
@@ -197,10 +139,6 @@ class VGG_SNN_STDB(nn.Module):
 				layers += [nn.Dropout(self.dropout)]
 				in_channels = x
 
-		if self.dataset== 'IMAGENET':
-			layers.pop()
-			layers += [nn.AvgPool2d(kernel_size=2, stride=2)]
-			
 		features = nn.Sequential(*layers)
 		
 		layers = []
@@ -213,7 +151,7 @@ class VGG_SNN_STDB(nn.Module):
 			layers += [nn.Dropout(self.dropout)]
 			layers += [nn.Linear(4096, self.labels, bias=False)]
 
-		elif self.vgg_name == 'VGG5' and self.dataset != 'MNIST':
+		elif self.vgg_name == 'VGG6' and self.dataset != 'MNIST':
 			layers += [nn.Linear(512*4*4, 4096, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
 			layers += [nn.Dropout(self.dropout)]
@@ -231,7 +169,7 @@ class VGG_SNN_STDB(nn.Module):
 			#layers += [nn.Dropout(self.dropout)]
 			layers += [nn.Linear(1024, self.labels, bias=False)]
 		
-		elif self.vgg_name != 'VGG5' and self.dataset != 'MNIST':
+		elif self.vgg_name != 'VGG6' and self.dataset != 'MNIST':
 			layers += [nn.Linear(512*2*2, 4096, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
 			layers += [nn.Dropout(self.dropout)]
@@ -240,7 +178,7 @@ class VGG_SNN_STDB(nn.Module):
 			layers += [nn.Dropout(self.dropout)]
 			layers += [nn.Linear(4096, self.labels, bias=False)]
 		
-		elif self.vgg_name == 'VGG5' and self.dataset == 'MNIST':
+		elif self.vgg_name == 'VGG6' and self.dataset == 'MNIST':
 			layers += [nn.Linear(128*7*7, 4096, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
 			layers += [nn.Dropout(self.dropout)]
@@ -249,7 +187,7 @@ class VGG_SNN_STDB(nn.Module):
 			layers += [nn.Dropout(self.dropout)]
 			layers += [nn.Linear(4096, self.labels, bias=False)]
 
-		elif self.vgg_name != 'VGG5' and self.dataset == 'MNIST':
+		elif self.vgg_name != 'VGG6' and self.dataset == 'MNIST':
 			layers += [nn.Linear(512*1*1, 4096, bias=False)]
 			layers += [nn.ReLU(inplace=True)]
 			layers += [nn.Dropout(self.dropout)]
@@ -264,10 +202,7 @@ class VGG_SNN_STDB(nn.Module):
 
 	def network_update(self, timesteps):
 		self.timesteps 	= timesteps
-		#for key, value in sorted(self.leak.items(), key=lambda x: (int(x[0][1:]), (x[1]))):
-		#	if isinstance(leak, list) and leak:
-		#		self.leak.update({key: nn.Parameter(torch.tensor(leak.pop(0)))})
-	
+			
 	def neuron_init(self, x):
 		self.batch_size = x.size(0)
 		self.width 		= x.size(2)
@@ -308,90 +243,37 @@ class VGG_SNN_STDB(nn.Module):
 			elif isinstance(self.classifier[l], nn.Dropout):
 				self.mask[prev+l] = self.classifier[l](torch.ones(self.mem[prev+l-2].shape).cuda())
 				
-		# self.spike = copy.deepcopy(self.mem)
-		# for key, values in self.spike.items():
-		# 	for value in values:
-		# 		value.fill_(-1000)
-
+		
 	def percentile(self, t, q):
 
 		k = 1 + round(.01 * float(q) * (t.numel() - 1))
 		result = t.view(-1).kthvalue(k).values.item()
 		return result
-	
-	def custom_dropout(self, tensor, prob, conv=True):
-		if prob==0:
-			return tensor
-		mask_retain			= F.dropout(tensor, p=prob, training=True).bool()*1
-		mask_drop 			= (mask_retain==0)*1
-		tensor_retain 		= tensor*mask_retain
-		tensor_drop 		= tensor*mask_drop
-		if conv:
-			tensor_drop_sum	= tensor_drop.sum(dim=(2,3))
-			retain_no 		= mask_retain.sum(dim=(2,3))
-			tensor_drop_sum[retain_no==0] = 0
-			retain_no[retain_no==0] = 1
-			increment 		= tensor_drop_sum/(retain_no)
-			increment_array = increment.repeat_interleave(tensor.shape[2]*tensor.shape[3]).view(tensor.shape)
-		else:
-			#pdb.set_trace()
-			tensor_drop_sum = tensor_drop.sum(dim=1)
-			retain_no 		= mask_retain.sum(dim=1)
-			tensor_drop_sum[retain_no==0] = 0
-			retain_no[retain_no==0] = 1
-			increment 		= tensor_drop_sum/(retain_no)	
-			increment_array = increment.repeat_interleave(tensor.shape[1]).view(tensor.shape)
-			
-		increment_array = increment_array*mask_retain
-		new_tensor 		= tensor_retain+increment_array
 		
-		return new_tensor
-
-	def forward(self, x, find_max_mem=False, max_mem_layer=0, percentile=99.7):
+	def forward(self, x, find_max_mem=False, max_mem_layer=0):
 		
 		self.neuron_init(x)
 		max_mem=0.0
-		# if find_max_mem:
-		# 	prob=self.vmem_drop
-		# else:
-		# 	prob=self.vmem_drop
-		#ann = [0]*len(self.features)
-		#ann[1] = 1
-		#pdb.set_trace()
+				
 		for t in range(self.timesteps):
 			out_prev = x
-			# keys = [*self.mem]
-			# print('time: {}'.format(t), end=', ')
-			# for l, key in enumerate(keys):
-			# 	print('l{}: {:.1f}'.format(l+1, self.mem[key].max()), end=', ')
-			# print()
-			# input()
+			
 			for l in range(len(self.features)):
-				#if l==27:
-				#	pdb.set_trace()
+				
 				if isinstance(self.features[l], (nn.Conv2d)):
 					
 					if find_max_mem and l==max_mem_layer:
-						#if t==9:
-							#pdb.set_trace()
-						cur = self.percentile(self.features[l](out_prev).view(-1), percentile)
+						cur = self.percentile(self.features[l](out_prev).view(-1), 99.7)
 						if (cur>max_mem):
 							max_mem = torch.tensor([cur])
 						break
 					
-					#mem_thr 		= (self.mem[l]/getattr(self.threshold, 't'+str(l))) - 1.0
-					#rst 			= getattr(self.threshold, 't'+str(l)) * (mem_thr>0).float()
-					#self.mem[l] 	= getattr(self.leak, 'l'+str(l)) *self.mem[l] + self.features[l](out_prev) - rst
-					#delta_mem 		= self.custom_dropout(self.features[l](out_prev), prob=prob, conv=True)
-					delta_mem 		= self.features[l](out_prev)
-					self.mem[l] 	= getattr(self.leak, 'l'+str(l)) *self.mem[l] + delta_mem
 					mem_thr 		= (self.mem[l]/getattr(self.threshold, 't'+str(l))) - 1.0
 					rst 			= getattr(self.threshold, 't'+str(l)) * (mem_thr>0).float()
-					self.mem[l] 	= self.mem[l]-rst
-					#out_prev 		= self.features[l](out_prev)
-					
+					self.mem[l] 	= getattr(self.leak, 'l'+str(l)) *self.mem[l] + self.features[l](out_prev) - rst
+									
 				elif isinstance(self.features[l], nn.ReLU):
-					#pdb.set_trace()
+					
 					out 			= self.act_func(mem_thr, (t-1-self.spike[l]))
 					self.spike[l] 	= self.spike[l].masked_fill(out.bool(),t-1)
 					out_prev  		= out.clone()
@@ -407,28 +289,20 @@ class VGG_SNN_STDB(nn.Module):
 
 			out_prev       	= out_prev.reshape(self.batch_size, -1)
 			prev = len(self.features)
-			#pdb.set_trace()
+			
 			for l in range(len(self.classifier)-1):
 													
 				if isinstance(self.classifier[l], (nn.Linear)):
 					
 					if find_max_mem and (prev+l)==max_mem_layer:
-						#pdb.set_trace()
-						cur = self.percentile(self.classifier[l](out_prev).view(-1), percentile)
+						cur = self.percentile(self.classifier[l](out_prev).view(-1),99.7)
 						if cur>max_mem:
 							max_mem = torch.tensor([cur])
 						break
 
-					#mem_thr 			= (self.mem[prev+l]/getattr(self.threshold, 't'+str(prev+l))) - 1.0
-					#rst 				= getattr(self.threshold,'t'+str(prev+l)) * (mem_thr>0).float()
-					#self.mem[prev+l] 	= getattr(self.leak, 'l'+str(prev+l)) * self.mem[prev+l] + self.classifier[l](out_prev) - rst
-					#delta_mem 			= self.custom_dropout(self.classifier[l](out_prev), prob=prob, conv=False)
-					delta_mem 			= self.classifier[l](out_prev)
-					self.mem[prev+l] 	= getattr(self.leak, 'l'+str(prev+l)) * self.mem[prev+l] + delta_mem
 					mem_thr 			= (self.mem[prev+l]/getattr(self.threshold, 't'+str(prev+l))) - 1.0
 					rst 				= getattr(self.threshold,'t'+str(prev+l)) * (mem_thr>0).float()
-					self.mem[prev+l] 	= self.mem[prev+l]-rst
-
+					self.mem[prev+l] 	= getattr(self.leak, 'l'+str(prev+l)) * self.mem[prev+l] + self.classifier[l](out_prev) - rst
 				
 				elif isinstance(self.classifier[l], nn.ReLU):
 					out 				= self.act_func(mem_thr, (t-1-self.spike[prev+l]))
@@ -445,3 +319,6 @@ class VGG_SNN_STDB(nn.Module):
 			return max_mem
 
 		return self.mem[prev+l+1]
+
+
+
