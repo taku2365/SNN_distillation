@@ -347,10 +347,11 @@ class VGG_SNN_STDB(nn.Module):
 		
 		return new_tensor
 
-	def forward(self, x, find_max_mem=False, max_mem_layer=0, percentile=99.7):
+	def forward(self, x, find_max_mem=False, is_feat=False,max_mem_layer=0, percentile=99.7):
 		
 		self.neuron_init(x)
 		max_mem=0.0
+		midle_features = {}
 		# if find_max_mem:
 		# 	prob=self.vmem_drop
 		# else:
@@ -395,6 +396,11 @@ class VGG_SNN_STDB(nn.Module):
 					out 			= self.act_func(mem_thr, (t-1-self.spike[l]))
 					self.spike[l] 	= self.spike[l].masked_fill(out.bool(),t-1)
 					out_prev  		= out.clone()
+					if t ==5:
+						midle_features[l]     = out_prev
+					
+					else:
+						midle_features[l]     += out_prev
 
 				elif isinstance(self.features[l], nn.AvgPool2d):
 					out_prev 		= self.features[l](out_prev)
@@ -443,5 +449,9 @@ class VGG_SNN_STDB(nn.Module):
 				self.mem[prev+l+1] 		= self.mem[prev+l+1] + self.classifier[l+1](out_prev)
 		if find_max_mem:
 			return max_mem
+		
+		if (is_fest):
+			return self.mem[prev+l+1],midle_features.values()
+
 
 		return self.mem[prev+l+1]
