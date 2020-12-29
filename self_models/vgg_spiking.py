@@ -3,7 +3,7 @@
 #---------------------------------------------------
 
 #python snn.py --dataset CIFAR10 --epoch 300 --batch_size 64 --architecture VGG16 --learning_rate 1e-4 --epochs 10 --lr_interval '0.60 0.80 0.90' --lr_reduce 5 --timesteps 10 --leak 1.0 --scaling_factor 0.6 --optimizer Adam --weight_decay 0 --momentum 0 --amsgrad True --dropout 0.1 --train_acc_batches 50 --default_threshold 1.0 --pretrained_ann trained_models/ann_vgg16_cifar10_best_model1.pth
-#python snn.py --dataset CIFAR100 --epoch 300 --batch_size 64 --architecture VGG16 --learning_rate 1e-4 --epochs 10 --lr_interval '0.60 0.80 0.90' --lr_reduce 5 --timesteps 10 --leak 1.0 --scaling_factor 0.6 --optimizer Adam --weight_decay 0 --momentum 0 --amsgrad True --dropout 0.1 --train_acc_batches 50 --default_threshold 1.0 --pretrained_ann trained_models/ann_vgg16_cifar100_best_model.pth
+#python snn.py --dataset CIFAR100 --epoch 300 --batch_size 64 --architecture VGG16 --learning_rate 5e-4 --epochs 300 --lr_interval '0.60 0.80 0.90' --lr_reduce 10 --timesteps 5 --leak 1.0 --scaling_factor 0.6 --optimizer Adam --weight_decay 0 --momentum 0 --amsgrad True --dropout 0.1 --default_threshold 1.0 --pretrained_ann trained_models/ann_vgg16_cifar100_best_model.pth
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -33,7 +33,7 @@ class LinearSpike(torch.autograd.Function):
     gamma = 0.3 # Controls the dampening of the piecewise-linear surrogate gradient
 
     @staticmethod
-    def forward(ctx, input, last_spike):
+    def forward(ctx, input):
         
         ctx.save_for_backward(input)
         out = torch.zeros_like(input).cuda()
@@ -280,13 +280,13 @@ class VGG_SNN_STDB(nn.Module):
 		for l in range(len(self.features)):
 								
 			if isinstance(self.features[l], nn.Conv2d):
-				self.mem[l] 		= torch.zeros(self.batch_size, self.features[l].out_channels, self.width, self.height)
+				self.mem[l] 		= torch.zeros(self.batch_size, self.features[l].out_channels, self.width, self.height).cuda()
 			
-			elif isinstance(self.features[l], nn.ReLU):
-				if isinstance(self.features[l-1], nn.Conv2d):
-					self.spike[l] 	= torch.ones(self.mem[l-1].shape)*(-1000)
-				elif isinstance(self.features[l-1], nn.AvgPool2d):
-					self.spike[l] 	= torch.ones(self.batch_size, self.features[l-2].out_channels, self.width, self.height)*(-1000)
+			# elif isinstance(self.features[l], nn.ReLU):
+			# 	if isinstance(self.features[l-1], nn.Conv2d):
+			# 		self.spike[l] 	= torch.ones(self.mem[l-1].shape,requires_grad = False)*(-1000)
+			# 	elif isinstance(self.features[l-1], nn.AvgPool2d):
+			# 		self.spike[l] 	= torch.ones(self.batch_size, self.features[l-2].out_channels, self.width, self.height,requires_grad = False)*(-1000)
 
 			elif isinstance(self.features[l], nn.Dropout):
 				self.mask[l] = self.features[l](torch.ones(self.mem[l-2].shape).cuda())
@@ -300,10 +300,10 @@ class VGG_SNN_STDB(nn.Module):
 		for l in range(len(self.classifier)):
 			
 			if isinstance(self.classifier[l], nn.Linear):
-				self.mem[prev+l] 		= torch.zeros(self.batch_size, self.classifier[l].out_features)
+				self.mem[prev+l] 		= torch.zeros(self.batch_size, self.classifier[l].out_features).cuda()
 			
-			elif isinstance(self.classifier[l], nn.ReLU):
-				self.spike[prev+l] 		= torch.ones(self.mem[prev+l-1].shape)*(-1000)
+			# elif isinstance(self.classifier[l], nn.ReLU):
+			# 	self.spike[prev+l] 		= torch.ones(self.mem[prev+l-1].shape,requires_grad = False)*(-1000)
 
 			elif isinstance(self.classifier[l], nn.Dropout):
 				self.mask[prev+l] = self.classifier[l](torch.ones(self.mem[prev+l-2].shape).cuda())
@@ -368,22 +368,13 @@ class VGG_SNN_STDB(nn.Module):
 			# print()
 			# input()
 			for l in range(len(self.features)):
-				#if l==27:
-				#	pdb.set_trace()
 				if isinstance(self.features[l], (nn.Conv2d)):
 					
 					if find_max_mem and l==max_mem_layer:
-						#if t==9:
-							#pdb.set_trace()
 						cur = self.percentile(self.features[l](out_prev).view(-1), percentile)
 						if (cur>max_mem):
 							max_mem = torch.tensor([cur])
 						break
-					
-					#mem_thr 		= (self.mem[l]/getattr(self.threshold, 't'+str(l))) - 1.0
-					#rst 			= getattr(self.threshold, 't'+str(l)) * (mem_thr>0).float()
-					#self.mem[l] 	= getattr(self.leak, 'l'+str(l)) *self.mem[l] + self.features[l](out_prev) - rst
-					#delta_mem 		= self.custom_dropout(self.features[l](out_prev), prob=prob, conv=True)
 					delta_mem 		= self.features[l](out_prev)
 					self.mem[l] 	= getattr(self.leak, 'l'+str(l)) *self.mem[l] + delta_mem
 					mem_thr 		= (self.mem[l]/getattr(self.threshold, 't'+str(l))) - 1.0
@@ -393,14 +384,9 @@ class VGG_SNN_STDB(nn.Module):
 					
 				elif isinstance(self.features[l], nn.ReLU):
 					#pdb.set_trace()
-					out 			= self.act_func(mem_thr, (t-1-self.spike[l]))
-					self.spike[l] 	= self.spike[l].masked_fill(out.bool(),t-1)
+					out 			= self.act_func(mem_thr)
+					# self.spike[l] 	= self.spike[l].masked_fill(out.bool(),t-1)
 					out_prev  		= out.clone()
-					if t ==5:
-						midle_features[l]     = out_prev
-					
-					else:
-						midle_features[l]     += out_prev
 
 				elif isinstance(self.features[l], nn.AvgPool2d):
 					out_prev 		= self.features[l](out_prev)
@@ -424,11 +410,6 @@ class VGG_SNN_STDB(nn.Module):
 						if cur>max_mem:
 							max_mem = torch.tensor([cur])
 						break
-
-					#mem_thr 			= (self.mem[prev+l]/getattr(self.threshold, 't'+str(prev+l))) - 1.0
-					#rst 				= getattr(self.threshold,'t'+str(prev+l)) * (mem_thr>0).float()
-					#self.mem[prev+l] 	= getattr(self.leak, 'l'+str(prev+l)) * self.mem[prev+l] + self.classifier[l](out_prev) - rst
-					#delta_mem 			= self.custom_dropout(self.classifier[l](out_prev), prob=prob, conv=False)
 					delta_mem 			= self.classifier[l](out_prev)
 					self.mem[prev+l] 	= getattr(self.leak, 'l'+str(prev+l)) * self.mem[prev+l] + delta_mem
 					mem_thr 			= (self.mem[prev+l]/getattr(self.threshold, 't'+str(prev+l))) - 1.0
@@ -437,8 +418,8 @@ class VGG_SNN_STDB(nn.Module):
 
 				
 				elif isinstance(self.classifier[l], nn.ReLU):
-					out 				= self.act_func(mem_thr, (t-1-self.spike[prev+l]))
-					self.spike[prev+l] 	= self.spike[prev+l].masked_fill(out.bool(),t-1)
+					out 				= self.act_func(mem_thr)
+					# self.spike[prev+l] 	= self.spike[prev+l].masked_fill(out.bool(),t-1)
 					out_prev  			= out.clone()
 
 				elif isinstance(self.classifier[l], nn.Dropout):
@@ -450,8 +431,7 @@ class VGG_SNN_STDB(nn.Module):
 		if find_max_mem:
 			return max_mem
 		
-		if (is_fest):
-			return self.mem[prev+l+1],midle_features.values()
+
 
 
 		return self.mem[prev+l+1]
