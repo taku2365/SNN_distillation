@@ -50,7 +50,7 @@ class LinearSpike(torch.autograd.Function):
 
 class VGG_SNN_STDB(nn.Module):
 
-	def __init__(self, vgg_name, activation='Linear', labels=10, timesteps=100, leak=1.0, default_threshold = 1.0, dropout=0.2, kernel_size=3, dataset='CIFAR10', individual_thresh=False, vmem_drop=0):
+	def __init__(self, vgg_name, activation='Linear', labels=10, timesteps=100, leak=1.0, default_threshold = 1.0, dropout=0.2, kernel_size=3, dataset='CIFAR10', individual_thresh=False, vmem_drop=0,input_compress_rate=0,rank_reduce=False):
 		super().__init__()
 		
 		self.vgg_name 		= vgg_name
@@ -72,7 +72,8 @@ class VGG_SNN_STDB(nn.Module):
 		self.mem 			= {}
 		self.mask 			= {}
 		self.spike 			= {}
-		
+		self.input_compress_rate = input_compress_rate
+		self.rank_reduce   = rank_reduce
 		self.features, self.classifier = self._make_layers(cfg[self.vgg_name])
 		
 		self._initialize_weights2()
@@ -183,19 +184,31 @@ class VGG_SNN_STDB(nn.Module):
 		else:
 			in_channels = 3
 
-		for x in (cfg):
+		for i,x in enumerate(cfg):
 			stride = 1
 						
 			if x == 'A':
 				layers.pop()
 				layers += [nn.AvgPool2d(kernel_size=2, stride=2)]
 			
-			else:
-				layers += [nn.Conv2d(in_channels, x, kernel_size=self.kernel_size, padding=(self.kernel_size-1)//2, stride=stride, bias=False),
-							nn.ReLU(inplace=True)
-							]
+			else:	
+				if (self.input_compress_rate != 0) and (i==0):
+					layers += [nn.Conv2d(in_channels, int(x*(1-self.input_compress_rate)), kernel_size=self.kernel_size, padding=(self.kernel_size-1)//2, stride=stride, bias=False),
+								nn.ReLU(inplace=True)
+								]	
+					in_channels = int(x*(1-self.input_compress_rate))		
+							
+    			
+				else:
+					layers += [nn.Conv2d(in_channels, x, kernel_size=self.kernel_size, padding=(self.kernel_size-1)//2, stride=stride, bias=False),
+									nn.ReLU(inplace=True)
+								]
+					in_channels = x    				
+					
+					
 				layers += [nn.Dropout(self.dropout)]
-				in_channels = x
+    				
+    				
 
 		if self.dataset== 'IMAGENET':
 			layers.pop()
@@ -280,8 +293,10 @@ class VGG_SNN_STDB(nn.Module):
 		for l in range(len(self.features)):
 								
 			if isinstance(self.features[l], nn.Conv2d):
+    
 				self.mem[l] 		= torch.zeros(self.batch_size, self.features[l].out_channels, self.width, self.height).cuda()
-			
+				if(l == 0):
+					self.input_rank = torch.zeros(self.batch_size, self.features[l].out_channels, self.width, self.height).cuda()   
 			# elif isinstance(self.features[l], nn.ReLU):
 			# 	if isinstance(self.features[l-1], nn.Conv2d):
 			# 		self.spike[l] 	= torch.ones(self.mem[l-1].shape,requires_grad = False)*(-1000)
@@ -381,10 +396,13 @@ class VGG_SNN_STDB(nn.Module):
 					rst 			= getattr(self.threshold, 't'+str(l)) * (mem_thr>0).float()
 					self.mem[l] 	= self.mem[l]-rst
 					#out_prev 		= self.features[l](out_prev)
+
 					
 				elif isinstance(self.features[l], nn.ReLU):
 					#pdb.set_trace()
 					out 			= self.act_func(mem_thr)
+					if(l==1):
+						self.input_rank += out 
 					# self.spike[l] 	= self.spike[l].masked_fill(out.bool(),t-1)
 					out_prev  		= out.clone()
 
@@ -431,7 +449,15 @@ class VGG_SNN_STDB(nn.Module):
 		if find_max_mem:
 			return max_mem
 		
-
+		if self.rank_reduce:
+			a = self.input_rank.shape[0]
+			b = self.input_rank.shape[1]
+			c = torch.tensor([torch.matrix_rank(self.input_rank[i,j,:,:]/self.timesteps).cuda().item() for i in range(a) for j in range(b)]).cuda()
+			c = c.view(a, -1).float()
+			c = c.sum(0)
+			return self.mem[prev+l+1],c
+			# return self.mem[prev+l+1],self.input_rank
+    		
 
 
 		return self.mem[prev+l+1]

@@ -17,7 +17,7 @@ cfg = {
 
 
 class VGG(nn.Module):
-    def __init__(self, vgg_name='VGG16', labels=10, dataset = 'CIFAR10', kernel_size=3, dropout=0.2):
+    def __init__(self, vgg_name='VGG16', labels=10, dataset = 'CIFAR10', kernel_size=3, dropout=0.2,input_compress_rate=0,rank_reduce=False):
         super(VGG, self).__init__()
         
         self.dataset        = dataset

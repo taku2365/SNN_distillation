@@ -1,9 +1,9 @@
 #python snn_sskd.py --t-path ./experiments/teacher_wrn_40_2_seed0/ --s-arch wrn_16_2 --lr 0.001 --gpu-id 0
 # python snn_kd.py --t-path ./experiments/teacher_wrn_40_2_seed0/ --s-arch VGG16 --lr 0.0001 --gpu-id "0,1" --epoch 500 --milestones [250,350,400]
-# python snn_kd.py --t-path ./experiments/teacher_wrn_40_2_seed0_CIFAR100/ --s-arch VGG_SNN_STDB --lr 0.0005 --gpu-id "0,1" --milestones 250 350 400 --epoch 500  --after_distillation Ture --dataset CIFAR100 
-# python snn_kd.py --t-path ./experiments/teacher_ResNet50_seed0_CIFAR100/ --s-arch VGG_SNN_STDB --lr 0.0005 --gpu-id "0,1" --milestones 250 350 400 --epoch 500  --after_distillation Ture --dataset CIFAR100 
+# python snn_kd.py --t-path ./experiments/teacher_wrn_40_2_seed0_CIFAR100/ --s-arch VGG_SNN_STDB --lr 0.0005 --gpu-id "0,1" --milestones 15 30 50 --epoch 70  --after_distillation Ture --dataset CIFAR100 --timesteps 5 
+# python snn_kd.py --t-path ./experiments/teacher_ResNet50_seed0_CIFAR100/ --s-arch VGG_SNN_STDB --lr 0.0005 --gpu-id "0,1" --milestones 15 30 50 --epoch 70  --after_distillation Ture --dataset CIFAR100 --timesteps 5 --input_compress_rate 0.45 --rank_reduce True
 # python snn_kd.py --t-path ./experiments/teacher_ResNet50_seed0_CIFAR100/ --s-arch VGG_SNN_STDB --lr 0.0005 --gpu-id "0,1" --milestones 15 30  --epoch 100  --after_distillation Ture --dataset CIFAR100 
-# python snn_kd.py --t-path ./experiments/teacher_wrn_40_2_seed0_CIFAR10/ --s-arch VGG_SNN_STDB --lr 0.0005 --gpu-id "0,1" --milestones 250 350 400 --epoch 500   --dataset CIFAR10
+# python snn_kd.py --t-path ./experiments/teacher_wrn_40_2_seed0_CIFAR10/ --s-arch VGG_SNN_STDB --lr 0.0005 --gpu-id "0,1" --milestones 250 350 400 --epoch 500   --dataset CIFAR10 
 # sskd_student_VGG_SNN_STDB_weight0.1+0.9+2.7+10.0_T4.0+4.0+0.5_ratio1.0+0.75_seed0_teacher_wrn_40_2_seed0 74.63%  t wideresnet40_2   VGG after_distillation 75~
 
 import os
@@ -64,9 +64,13 @@ parser.add_argument('--s-path', type=str) # teacher checkpoint path
 parser.add_argument('--retrain', type=bool,default=False) # teacher checkpoint path
 parser.add_argument('--after_distillation', type=bool,default=False) # teacher checkpoint path
 parser.add_argument('--self_distillation', type=bool,default=False) # teacher checkpoint path
-parser.add_argument('--dataset',                default='CIFAR10',          type=str,       help='dataset name', choices=['CIFAR10','CIFAR100'])
+parser.add_argument('--dataset',  default='CIFAR10',type=str, help='dataset name', choices=['CIFAR10','CIFAR100'])
 parser.add_argument('--seed', type=int, default=0)
 parser.add_argument('--gpu-id', type=str, default=0)
+parser.add_argument('--timesteps', default=5, type=int, help='simulation timesteps')
+parser.add_argument('--input_compress_rate', default=0,   type=float )
+parser.add_argument('--rank_reduce', default=False,   type=bool )
+
 
 args = parser.parse_args()
 torch.manual_seed(args.seed)
@@ -77,17 +81,18 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_id
 
 t_name = osp.abspath(args.t_path).split('/')[-1]
 t_arch = '_'.join(t_name.split('_')[1:-2])
-exp_name = 'sskd_student_{}_weight{}+{}+{}+{}_T{}+{}+{}_ratio{}+{}_seed{}_{}_{}'.format(\
+exp_name = 'sskd_student_{}_weight{}+{}+{}+{}_T{}+{}+{}_ratio{}+{}_seed{}_{}_timesteps{}'.format(\
             args.s_arch, \
             args.ce_weight, args.kd_weight, args.tf_weight, args.ss_weight, \
             args.kd_T, args.tf_T, args.ss_T, \
             args.ratio_tf, args.ratio_ss, \
-            args.seed, t_name,args.dataset)
+            args.seed, t_name,args.timesteps)
 exp_path_t = './experiments/{}'.format(exp_name)
+print(exp_path_t)
 os.makedirs(exp_path_t, exist_ok=True)
 
 vgg_after_distillation_CIFAR100= "./experiments/sskd_student_VGG16_weight0.1+0.9+2.7+10.0_T4.0+4.0+0.5_ratio1.0+0.75_seed0_teacher_wrn_40_2_seed0_retrain/ckpt/student_best.pth"
-
+vgg_stdb_after_distillation_CIFAR100= "./experiments/sskd_student_VGG_SNN_STDB_weight0.1+0.9+2.7+10.0_T4.0+4.0+0.5_ratio1.0+0.75_seed0_teacher_ResNet50_seed0_CIFAR100_timesteps5/ckpt/student_best.pth"
 
 if args.dataset == 'CIFAR100':
     normalize   = transforms.Normalize((0.5071,0.4867,0.4408),(0.2675,0.2565,0.2761))
@@ -106,6 +111,33 @@ transform_test = transforms.Compose([
     transforms.ToTensor(),
    normalize,
 ])
+
+num = 0
+feature_result = torch.tensor(0.)
+total = torch.tensor(0.)
+
+def get_feature_hook(self, input, output):
+    global feature_result
+    # global entropy
+    global total
+    global num
+    a = output.shape[0]
+    b = output.shape[1]
+    # print(output.size())
+    c = torch.tensor([torch.matrix_rank(output[i,j,:,:]).item() for i in range(a) for j in range(b)])
+    # print(c)
+    # print(num)
+    num += 1
+    # print(output.size())
+    # print(output[0,0,:,:].size())
+    # print(torch.matrix_rank(output[0,0,:,:]).size())
+    # print(torch.matrix_rank(output[0,0,:,:]))
+    c = c
+    c = c.view(a, -1).float()
+    c = c.sum(0)
+    feature_result = feature_result * total + c
+    total = total + a
+    feature_result = feature_result / total
 
 if args.dataset == "CIFAR100":
     trainset = CIFAR100('./data', train=True, transform=transform_train,download=True)
@@ -144,10 +176,10 @@ logger = SummaryWriter(osp.join(exp_path_t, 'events'))
 acc_record = AverageMeter()
 loss_record = AverageMeter()
 start = time.time()
+
 for x, target in val_loader:
 
-
-
+    
     x = x[:,0,:,:,:].cuda()
     target = target.cuda()
     with torch.no_grad():
@@ -163,116 +195,17 @@ info = 'teacher cls_acc:{:.2f}\n'.format(acc_record.avg)
 print(info)
 
 
-# train ssp_head
-# for epoch in range(args.t_epoch):
 
 
 
-#     t_model.eval()
-#     loss_record = AverageMeter()
-#     acc_record = AverageMeter()
-
-#     start = time.time()
-#     for x, _ in train_loader:
-
-#         t_optimizer.zero_grad()
-
-#         x = x.cuda()
-#         c,h,w = x.size()[-3:]
-#         x = x.view(-1, c, h, w)
-
-#         a, rep, feat = t_model(x, bb_grad=False)
-#         batch = int(x.size(0) / 4)
-#         nor_index = (torch.arange(4*batch) % 4 == 0).cuda()
-#         aug_index = (torch.arange(4*batch) % 4 != 0).cuda()
-
-#         nor_rep = rep[nor_index]
-#         aug_rep = rep[aug_index]
-#         nor_rep = nor_rep.unsqueeze(2).expand(-1,-1,3*batch).transpose(0,2)
-#         aug_rep = aug_rep.unsqueeze(2).expand(-1,-1,1*batch)
-#         simi = F.cosine_similarity(aug_rep, nor_rep, dim=1)
-#         target = torch.arange(batch).unsqueeze(1).expand(-1,3).contiguous().view(-1).long().cuda()
-#         loss = F.cross_entropy(simi, target)
-
-#         loss.backward()
-#         t_optimizer.step()
-
-#         batch_acc = accuracy(simi, target, topk=(1,))[0]
-#         loss_record.update(loss.item(), 3*batch)
-#         acc_record.update(batch_acc.item(), 3*batch)
-
-#     logger.add_scalar('train/teacher_ssp_loss', loss_record.avg, epoch+1)
-#     logger.add_scalar('train/teacher_ssp_acc', acc_record.avg, epoch+1)
-
-#     run_time = time.time() - start
-#     info = 'teacher_train_Epoch:{:03d}/{:03d}\t run_time:{:.3f}\t ssp_loss:{:.3f}\t ssp_acc:{:.2f}\t'.format(
-#         epoch+1, args.t_epoch, run_time, loss_record.avg, acc_record.avg)
-#     print(info)
-
-#     t_model.eval()
-#     acc_record = AverageMeter()
-#     loss_record = AverageMeter()
-#     start = time.time()
-#     for x, _ in val_loader:
-
-
-#         x = x.cuda()
-#         c,h,w = x.size()[-3:]
-#         x = x.view(-1, c, h, w)
-
-#         with torch.no_grad():
-#             _, rep, feat = t_model(x)
-#         print("x {}\n".format(x.shape))
-#         batch = int(x.size(0) / 4)
-#         print("x.size(0)/4 {}\n".format(x.size(0)/4))
-#         print("x1 {}\n".format(x.shape))
-#         print("rep {}\n".format(rep.shape))
-#         print("feat {}\n".format(feat.shape))
-
-#         nor_index = (torch.arange(4*batch) % 4 == 0).cuda()
-#         aug_index = (torch.arange(4*batch) % 4 != 0).cuda()
-#         nor_rep = rep[nor_index]
-#         aug_rep = rep[aug_index]
-#         print("nor {}\n".format(nor_rep.shape))
-#         print("aug {}\n".format(aug_rep.shape))
-#         print("nor_rep.unsqueeze(2)  {}".format(nor_rep.unsqueeze(2).shape))
-#         print("nor_rep.unsqueeze(2).expand(-1,-1,3*batch)  {}".format(nor_rep.unsqueeze(2).expand(-1,-1,3*batch).shape))
-#         print("nor_rep.unsqueeze(2).expand(-1,-1,3*batch).transupose(0,2)  {}".format(nor_rep.unsqueeze(2).expand(-1,-1,3*batch).transpose(0,2).shape))
-#         nor_rep = nor_rep.unsqueeze(2).expand(-1,-1,3*batch).transpose(0,2)
-#         aug_rep = aug_rep.unsqueeze(2).expand(-1,-1,1*batch)
-#         print("nor1 {}\n".format(nor_rep.shape))
-#         print("aug1 {}\n".format(aug_rep.shape))
-#         simi = F.cosine_similarity(aug_rep, nor_rep, dim=1)
-#         print("simi {}\n".format(simi.shape))
-#         target = torch.arange(batch).unsqueeze(1).expand(-1,3).contiguous().view(-1).long().cuda()
-#         print("target {}\n".format(target.shape))
-#         loss = F.cross_entropy(simi, target)
-
-#         batch_acc = accuracy(simi, target, topk=(1,))[0]
-#         acc_record.update(batch_acc.item(),3*batch)
-#         loss_record.update(loss.item(), 3*batch)
-
-#     run_time = time.time() - start
-#     logger.add_scalar('val/teacher_ssp_loss', loss_record.avg, epoch+1)
-#     logger.add_scalar('val/teacher_ssp_acc', acc_record.avg, epoch+1)
-
-#     info = 'ssp_test_Epoch:{:03d}/{:03d}\t run_time:{:.2f}\t ssp_loss:{:.3f}\t ssp_acc:{:.2f}\n'.format(
-#             epoch+1, args.t_epoch, run_time, loss_record.avg, acc_record.avg)
-#     print(info)
-
-#     t_scheduler.step()
-
-
-# name = osp.join(exp_path_t, 'ckpt/teacher.pth')
-# os.makedirs(osp.dirname(name), exist_ok=True)
-# torch.save(t_model.state_dict(), name)
-
-# s_model = RESNET_SNN_BATCH_NORM(resnet_name = "RESNET20_BATCH_NORM",labels=100, timesteps=5,dropout=0.3, dataset="CIFAR100",t_divede=5)
+net_name = "RESNET20_BATCH_NORM",labels=100, timesteps=5,dropout=0.3, dataset="CIFAR100",t_divede=5)
 if args.s_arch == "VGG_SNN_STDB":
     # if args.retrain:
     #     state = torch.load("{}/ckpt/student_best.pth".format(exp_path_t), map_location='cpu') 
-    s_model = VGG_SNN_STDB(vgg_name = "VGG16",labels=num_classes, timesteps=5,dropout=0.1,dataset=args.dataset)
+    s_model = VGG_SNN_STDB(vgg_name = "VGG16",labels=num_classes, timesteps=args.timesteps,dropout=0.1,dataset=args.dataset,rank_reduce=args.rank_reduce)
     s_model = nn.DataParallel(s_model)
+    s_model_rank = VGG_SNN_STDB(vgg_name = "VGG16",labels=num_classes, timesteps=args.timesteps,dropout=0.1,dataset=args.dataset,input_compress_rate=args.input_compress_rate)
+    s_model_rank = nn.DataParallel(s_model_rank)
     # s_model.cuda()
     if args.after_distillation:
         if args.dataset == "CIFAR100":
@@ -302,6 +235,174 @@ if args.s_arch == "VGG_SNN_STDB":
     s_model.cuda()
     optimizer =  optim.Adam(s_model.parameters(),
                         lr=args.lr, amsgrad=True, weight_decay=0, betas=(0.9,0.999))
+    
+    if args.rank_reduce:
+        # s_model = VGG_SNN_STDB(vgg_name = "VGG16",labels=num_classes, timesteps=args.timesteps,dropout=0.1,dataset=args.dataset)
+        state = torch.load(vgg_stdb_after_distillation_CIFAR100, map_location='cpu') 
+        optimizer =  optim.Adam(s_model.parameters(),
+                        lr=args.lr, amsgrad=True, weight_decay=0, betas=(0.9,0.999))
+        missing_keys, unexpected_keys = s_model.load_state_dict(state['state_dict'],strict=False)
+        s_model.module.rank_reduce = False
+        print('\n Missing keys : {}, Unexpected Keys: {}'.format(missing_keys, unexpected_keys))
+        s_model.cuda()
+        s_model.eval()
+        # optimizer =  optim.Adam(s_model.parameters(),
+        #                 lr=args.lr, amsgrad=True, weight_decay=0, betas=(0.9,0.999))        
+        s_model_rank.cuda()
+        s_model_rank.eval()
+        acc_record = AverageMeter()
+        loss_record = AverageMeter()
+        # for x, target in val_loader:
+
+        #     x = x[:,0,:,:,:].cuda()
+        #     target = target.cuda()
+        #     with torch.no_grad():
+        #         output = s_model(x)
+        #         loss = F.cross_entropy(output, target)
+
+        #     batch_acc = accuracy(output, target, topk=(1,))[0]
+        #     acc_record.update(batch_acc.item(), x.size(0))
+        #     loss_record.update(loss.item(), x.size(0))
+        # info = 'teacher cls_acc:{:.2f}\n'.format(acc_record.avg)
+        # print(info)
+        # exit(1)
+        # handler = s_model.module.features[0].register_forward_hook(get_feature_hook)
+
+
+        if not os.path.exists('./experiments/'+args.s_arch+'_rank_conv_input.npy'):
+
+            acc_record = AverageMeter()
+            loss_record = AverageMeter()
+            feature_result = 0
+            total = 0
+            i = 0
+
+            for x, target in train_loader:
+                x = x[:,0,:,:,:].cuda()
+                target = target.cuda()
+                with torch.no_grad():
+                    output,input_rank_sum = s_model(x)
+                    print(i)
+                    i += 1
+                    # print(input_rank_sum.size())
+                    # print(input_rank)
+
+                    # a = input_rank.shape[0]
+                    # b = input_rank.shape[1]
+                    # c = torch.tensor([torch.matrix_rank(input_rank[i,j,:,:]/args.timesteps).cuda().item() for i in range(a) for j in range(b)]).cuda()
+                    # c = c.view(a, -1).float()
+                    # c = c.sum(0)
+                    feature_result = feature_result * total + input_rank_sum
+                    total = total + input_rank_sum.size(0)
+                    feature_result = feature_result / total
+                    # print(1,feature_result[0:20])
+                    # print(2,feature_result[20:40])
+                    # print(3,feature_result[40:63])
+                    # loss = F.cross_entropy(output, target)
+
+                batch_acc = accuracy(output, target, topk=(1,))[0]
+                acc_record.update(batch_acc.item(), x.size(0))
+                # loss_record.update(loss.item(), x.size(0))
+
+
+            np.save('./experiments/'+args.s_arch+'_rank_conv_input.npy', feature_result.cpu().numpy())
+        
+        else:
+            feature_result = np.load('./experiments/'+args.s_arch+'_rank_conv_input.npy')
+        
+        input_weight_size = s_model.module.features[0].weight.size(0)
+        input_weight_size_rank = s_model_rank.module.features[0].weight.size(0)
+        select_index = np.argsort(feature_result)[input_weight_size-input_weight_size_rank:]
+        print(feature_result[select_index]) 
+        print(select_index)
+        select_index.sort()
+        print(select_index)
+        s_model_dict = s_model.state_dict()
+        s_model_dict_rank = s_model_rank.state_dict()
+        # s_model_index_input = np.arange(input_weight_size)
+        # s_model_index_input = s_model_index_input[input_weight_size-input_weight_size_rank:]
+
+
+        for index_i, select_i in enumerate(select_index):
+            s_model_dict_rank["module.features.0.weight"][index_i] = \
+            s_model_dict["module.features.0.weight"][select_i]
+
+
+        for i in range(s_model_rank.module.features[3].weight.size(0)):
+            for index_j, select_j in enumerate(select_index):
+                s_model_dict_rank["module.features.3.weight"][i][index_j]  = \
+                s_model_dict["module.features.3.weight"][i][select_j] 
+
+
+        for key in s_model_dict.keys():
+            if key in s_model_dict_rank.keys():
+                if (s_model_dict[key].shape == s_model_dict_rank[key].shape):
+                    s_model_dict_rank[key] = nn.Parameter(s_model_dict[key].data)
+                
+                else:
+                    print(key)
+
+
+        
+
+        missing_keys, unexpected_keys = s_model_rank.load_state_dict(s_model_dict_rank,strict=False)
+        print('\n Missing keys : {}, Unexpected Keys: {}'.format(missing_keys, unexpected_keys))
+        acc_record = AverageMeter()
+        loss_record = AverageMeter()
+        for x, target in val_loader:
+
+            x = x[:,0,:,:,:].cuda()
+            target = target.cuda()
+            with torch.no_grad():
+                output = s_model_rank(x)
+                # print(output)
+                loss = F.cross_entropy(output, target)
+
+            batch_acc = accuracy(output, target, topk=(1,))[0]
+            acc_record.update(batch_acc.item(), x.size(0))
+            loss_record.update(loss.item(), x.size(0))
+
+
+        info = 'teacher cls_acc:{:.2f}\n'.format(acc_record.avg)
+        print(info)
+        exit(1)
+
+
+    # # print(s_model_rank.module.features[0].weight.size())
+    # # print(s_model.state_dict()["module.features.0.weight"])
+    # s_model_dict = s_model.state_dict()
+    # s_model_dict_rank = s_model_rank.state_dict()
+
+    # input_weight_size = s_model.module.features[0].weight.size(0)
+    # input_weight_size_rank = s_model_rank.module.features[0].weight.size(0)
+    # s_model_index_input = np.arange(input_weight_size)
+    # s_model_index_input = s_model_index_input[input_weight_size-input_weight_size_rank:]
+    # # print(s_model_rank.module.features[0].weight.size(0))
+    # # print(input_weight_size-input_weight_size_rank)
+    # # print(s_model_index_input)
+    # # print(s_model_dict_rank["module.features.3.weight"][0][0])
+    # # print(s_model_dict_rank["module.features.0.weight"][0][0])
+    # print(s_model_dict_rank["module.features.3.weight"].size())
+
+
+
+    # for index_i, i in enumerate(s_model_index_input):
+    #         s_model_dict_rank["module.features.0.weight"][index_i] = \
+    #         s_model_dict["module.features.0.weight"][i]
+
+
+    # for i in range(s_model_rank.module.features[3].weight.size(0)):
+    #     for index_j, j in enumerate(s_model_index_input):
+    #         s_model_dict_rank["module.features.3.weight"][i][index_j]  = \
+    #         s_model_dict["module.features.3.weight"][i][j] 
+    
+    # # print(s_model_dict["module.features.0.weight"][29][0])
+    # # print(s_model_dict_rank["module.features.0.weight"][0][0])
+    # # print(s_model_dict["module.features.3.weight"][0][29])
+    # # print(s_model_dict_rank["module.features.3.weight"][0][0])
+    # # print(s_model_dict_rank["module.features.3.weight"][0].size())
+    # # print(s_model_dict_rank["module.features.3.weight"].size())
+    # exit(1)
     
     
 elif args.s_arch == "VGG16":
@@ -392,32 +493,6 @@ for epoch in range(args.epoch):
         index = index[:correct_num+wrong_keep]
         distill_index_tf = torch.sort(index)[0]
 
-        # s_nor_feat = s_feat[nor_index]
-        # s_aug_feat = s_feat[aug_index]
-        # s_nor_feat = s_nor_feat.unsqueeze(2).expand(-1,-1,3*batch).transpose(0,2)
-        # s_aug_feat = s_aug_feat.unsqueeze(2).expand(-1,-1,1*batch)
-        # s_simi = F.cosine_similarity(s_aug_feat, s_nor_feat, dim=1)
-
-        # t_nor_feat = t_feat[nor_index]
-        # t_aug_feat = t_feat[aug_index]
-        # t_nor_feat = t_nor_feat.unsqueeze(2).expand(-1,-1,3*batch).transpose(0,2)
-        # t_aug_feat = t_aug_feat.unsqueeze(2).expand(-1,-1,1*batch)
-        # t_simi = F.cosine_similarity(t_aug_feat, t_nor_feat, dim=1)
-
-        # t_simi = t_simi.detach()
-        # aug_target = torch.arange(batch).unsqueeze(1).expand(-1,3).contiguous().view(-1).long().cuda()
-        # rank = torch.argsort(t_simi, dim=1, descending=True)
-        # rank = torch.argmax(torch.eq(rank, aug_target.unsqueeze(1)).long(), dim=1)  # groundtruth label's rank
-        # index = torch.argsort(rank)
-        # tmp = torch.nonzero(rank, as_tuple=True)[0]
-        # wrong_num = tmp.numel()
-        # correct_num = 3*batch - wrong_num
-        # wrong_keep = int(wrong_num * args.ratio_ss)
-        # index = index[:correct_num+wrong_keep]
-        # distill_index_ss = torch.sort(index)[0]
-
-        # log_simi = F.log_softmax(s_simi / args.ss_T, dim=1)
-        # simi_knowledge = F.softmax(t_simi / args.ss_T, dim=1)
 
         loss1 = F.cross_entropy(output[nor_index], target)
         loss2 = F.kl_div(log_nor_output, nor_knowledge, reduction='batchmean') * args.kd_T * args.kd_T
@@ -479,6 +554,7 @@ for epoch in range(args.epoch):
 
     info = 'student_test_Epoch:{:03d}/{:03d}\t run_time:{:.2f}\t cls_acc:{:.2f}\n'.format(
             epoch+1, args.epoch, run_time, acc_record.avg)
+
     print(info)
 
     if acc_record.avg > best_acc:

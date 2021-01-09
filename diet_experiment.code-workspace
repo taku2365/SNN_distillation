@@ -5,6 +5,10 @@
 		},
 		{
 			"path": "../../DNN_test/SSKD"
+		},		
+		
+		{
+			"path": "../../DNN_test/HRankPlus"
 		}
 	],
 	"settings": {}
