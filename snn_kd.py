@@ -2,6 +2,7 @@
 # python snn_kd.py --t-path ./experiments/teacher_wrn_40_2_seed0/ --s-arch VGG16 --lr 0.0001 --gpu-id "0,1" --epoch 500 --milestones [250,350,400]
 # python snn_kd.py --t-path ./experiments/teacher_wrn_40_2_seed0_CIFAR100/ --s-arch VGG_SNN_STDB --lr 0.0005 --gpu-id "0,1" --milestones 15 30 50 --epoch 70  --after_distillation Ture --dataset CIFAR100 --timesteps 5 
 # python snn_kd.py --t-path ./experiments/teacher_ResNet50_seed0_CIFAR100/ --s-arch VGG_SNN_STDB --lr 0.0005 --gpu-id "0,1" --milestones 15 30 50 --epoch 70  --after_distillation Ture --dataset CIFAR100 --timesteps 5 --input_compress_rate 0.45 --rank_reduce True
+# python snn_kd.py --t-path ./experiments/teacher_ResNet50_seed0_CIFAR100/ --s-arch VGG16 --lr 0.0005 --gpu-id "0,1" --milestones 15 30 50 --epoch 70  --after_distillation Ture --dataset CIFAR100 --timesteps 5 --input_compress_rate 0.45 --rank_reduce True
 # python snn_kd.py --t-path ./experiments/teacher_ResNet50_seed0_CIFAR100/ --s-arch VGG_SNN_STDB --lr 0.0005 --gpu-id "0,1" --milestones 15 30  --epoch 100  --after_distillation Ture --dataset CIFAR100 
 # python snn_kd.py --t-path ./experiments/teacher_wrn_40_2_seed0_CIFAR10/ --s-arch VGG_SNN_STDB --lr 0.0005 --gpu-id "0,1" --milestones 250 350 400 --epoch 500   --dataset CIFAR10 
 # sskd_student_VGG_SNN_STDB_weight0.1+0.9+2.7+10.0_T4.0+4.0+0.5_ratio1.0+0.75_seed0_teacher_wrn_40_2_seed0 74.63%  t wideresnet40_2   VGG after_distillation 75~
@@ -151,8 +152,8 @@ else:
     valset = CIFAR10_aug('./data', train=False, transform=transform_test)
 
 
-train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=False)
-val_loader = DataLoader(valset, batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=False)
+train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=False)
+val_loader = DataLoader(valset, batch_size=args.batch_size, shuffle=False, num_workers=8, pin_memory=False)
 
 ckpt_path = osp.join(args.t_path,'ckpt/best.pth') 
 
@@ -177,28 +178,24 @@ acc_record = AverageMeter()
 loss_record = AverageMeter()
 start = time.time()
 
-for x, target in val_loader:
+# for x, target in val_loader:
 
     
-    x = x[:,0,:,:,:].cuda()
-    target = target.cuda()
-    with torch.no_grad():
-        output = t_model(x)
-        loss = F.cross_entropy(output, target)
+#     x = x[:,0,:,:,:].cuda()
+#     target = target.cuda()
+#     with torch.no_grad():
+#         output = t_model(x)
+#         loss = F.cross_entropy(output, target)
 
-    batch_acc = accuracy(output, target, topk=(1,))[0]
-    acc_record.update(batch_acc.item(), x.size(0))
-    loss_record.update(loss.item(), x.size(0))
-
-
-info = 'teacher cls_acc:{:.2f}\n'.format(acc_record.avg)
-print(info)
+#     batch_acc = accuracy(output, target, topk=(1,))[0]
+#     acc_record.update(batch_acc.item(), x.size(0))
+#     loss_record.update(loss.item(), x.size(0))
 
 
+# info = 'teacher cls_acc:{:.2f}\n'.format(acc_record.avg)
+# print(info)
 
 
-
-net_name = "RESNET20_BATCH_NORM",labels=100, timesteps=5,dropout=0.3, dataset="CIFAR100",t_divede=5)
 if args.s_arch == "VGG_SNN_STDB":
     # if args.retrain:
     #     state = torch.load("{}/ckpt/student_best.pth".format(exp_path_t), map_location='cpu') 
@@ -236,136 +233,7 @@ if args.s_arch == "VGG_SNN_STDB":
     optimizer =  optim.Adam(s_model.parameters(),
                         lr=args.lr, amsgrad=True, weight_decay=0, betas=(0.9,0.999))
     
-    if args.rank_reduce:
-        # s_model = VGG_SNN_STDB(vgg_name = "VGG16",labels=num_classes, timesteps=args.timesteps,dropout=0.1,dataset=args.dataset)
-        state = torch.load(vgg_stdb_after_distillation_CIFAR100, map_location='cpu') 
-        optimizer =  optim.Adam(s_model.parameters(),
-                        lr=args.lr, amsgrad=True, weight_decay=0, betas=(0.9,0.999))
-        missing_keys, unexpected_keys = s_model.load_state_dict(state['state_dict'],strict=False)
-        s_model.module.rank_reduce = False
-        print('\n Missing keys : {}, Unexpected Keys: {}'.format(missing_keys, unexpected_keys))
-        s_model.cuda()
-        s_model.eval()
-        # optimizer =  optim.Adam(s_model.parameters(),
-        #                 lr=args.lr, amsgrad=True, weight_decay=0, betas=(0.9,0.999))        
-        s_model_rank.cuda()
-        s_model_rank.eval()
-        acc_record = AverageMeter()
-        loss_record = AverageMeter()
-        # for x, target in val_loader:
 
-        #     x = x[:,0,:,:,:].cuda()
-        #     target = target.cuda()
-        #     with torch.no_grad():
-        #         output = s_model(x)
-        #         loss = F.cross_entropy(output, target)
-
-        #     batch_acc = accuracy(output, target, topk=(1,))[0]
-        #     acc_record.update(batch_acc.item(), x.size(0))
-        #     loss_record.update(loss.item(), x.size(0))
-        # info = 'teacher cls_acc:{:.2f}\n'.format(acc_record.avg)
-        # print(info)
-        # exit(1)
-        # handler = s_model.module.features[0].register_forward_hook(get_feature_hook)
-
-
-        if not os.path.exists('./experiments/'+args.s_arch+'_rank_conv_input.npy'):
-
-            acc_record = AverageMeter()
-            loss_record = AverageMeter()
-            feature_result = 0
-            total = 0
-            i = 0
-
-            for x, target in train_loader:
-                x = x[:,0,:,:,:].cuda()
-                target = target.cuda()
-                with torch.no_grad():
-                    output,input_rank_sum = s_model(x)
-                    print(i)
-                    i += 1
-                    # print(input_rank_sum.size())
-                    # print(input_rank)
-
-                    # a = input_rank.shape[0]
-                    # b = input_rank.shape[1]
-                    # c = torch.tensor([torch.matrix_rank(input_rank[i,j,:,:]/args.timesteps).cuda().item() for i in range(a) for j in range(b)]).cuda()
-                    # c = c.view(a, -1).float()
-                    # c = c.sum(0)
-                    feature_result = feature_result * total + input_rank_sum
-                    total = total + input_rank_sum.size(0)
-                    feature_result = feature_result / total
-                    # print(1,feature_result[0:20])
-                    # print(2,feature_result[20:40])
-                    # print(3,feature_result[40:63])
-                    # loss = F.cross_entropy(output, target)
-
-                batch_acc = accuracy(output, target, topk=(1,))[0]
-                acc_record.update(batch_acc.item(), x.size(0))
-                # loss_record.update(loss.item(), x.size(0))
-
-
-            np.save('./experiments/'+args.s_arch+'_rank_conv_input.npy', feature_result.cpu().numpy())
-        
-        else:
-            feature_result = np.load('./experiments/'+args.s_arch+'_rank_conv_input.npy')
-        
-        input_weight_size = s_model.module.features[0].weight.size(0)
-        input_weight_size_rank = s_model_rank.module.features[0].weight.size(0)
-        select_index = np.argsort(feature_result)[input_weight_size-input_weight_size_rank:]
-        print(feature_result[select_index]) 
-        print(select_index)
-        select_index.sort()
-        print(select_index)
-        s_model_dict = s_model.state_dict()
-        s_model_dict_rank = s_model_rank.state_dict()
-        # s_model_index_input = np.arange(input_weight_size)
-        # s_model_index_input = s_model_index_input[input_weight_size-input_weight_size_rank:]
-
-
-        for index_i, select_i in enumerate(select_index):
-            s_model_dict_rank["module.features.0.weight"][index_i] = \
-            s_model_dict["module.features.0.weight"][select_i]
-
-
-        for i in range(s_model_rank.module.features[3].weight.size(0)):
-            for index_j, select_j in enumerate(select_index):
-                s_model_dict_rank["module.features.3.weight"][i][index_j]  = \
-                s_model_dict["module.features.3.weight"][i][select_j] 
-
-
-        for key in s_model_dict.keys():
-            if key in s_model_dict_rank.keys():
-                if (s_model_dict[key].shape == s_model_dict_rank[key].shape):
-                    s_model_dict_rank[key] = nn.Parameter(s_model_dict[key].data)
-                
-                else:
-                    print(key)
-
-
-        
-
-        missing_keys, unexpected_keys = s_model_rank.load_state_dict(s_model_dict_rank,strict=False)
-        print('\n Missing keys : {}, Unexpected Keys: {}'.format(missing_keys, unexpected_keys))
-        acc_record = AverageMeter()
-        loss_record = AverageMeter()
-        for x, target in val_loader:
-
-            x = x[:,0,:,:,:].cuda()
-            target = target.cuda()
-            with torch.no_grad():
-                output = s_model_rank(x)
-                # print(output)
-                loss = F.cross_entropy(output, target)
-
-            batch_acc = accuracy(output, target, topk=(1,))[0]
-            acc_record.update(batch_acc.item(), x.size(0))
-            loss_record.update(loss.item(), x.size(0))
-
-
-        info = 'teacher cls_acc:{:.2f}\n'.format(acc_record.avg)
-        print(info)
-        exit(1)
 
 
     # # print(s_model_rank.module.features[0].weight.size())
@@ -406,35 +274,182 @@ if args.s_arch == "VGG_SNN_STDB":
     
     
 elif args.s_arch == "VGG16":
-    s_model = VGG(vgg_name="VGG16", labels=100, dataset=args.dataset)
+    s_model = VGG(vgg_name="VGG16", labels=100, dataset=args.dataset,rank_reduce=True,input_compress_rate=0)
+    s_model_rank = VGG(vgg_name="VGG16", labels=100, dataset=args.dataset,input_compress_rate=args.input_compress_rate)
     s_model = nn.DataParallel(s_model)
+    s_model_rank = nn.DataParallel(s_model_rank)
     if args.dataset == "CIFAR100":
         if args.retrain:
             state = torch.load("{}/ckpt/student_best.pth".format(exp_path_t), map_location='cpu')  
+        
+        elif args.rank_reduce:
+            state = torch.load(vgg_after_distillation_CIFAR100,map_location='cpu')
+
         else:
             state = torch.load("trained_models/ann_vgg16_cifar10_best_model.pth", map_location='cpu')     
  
-    if args.dataset == "CIFAR100":
         cur_dict = s_model.state_dict()
         for key in state['state_dict'].keys():
             if key in cur_dict:
+    
                 if (state['state_dict'][key].shape == cur_dict[key].shape):
-
+             
                     cur_dict[key] = nn.Parameter(state['state_dict'][key].data)
         missing_keys, unexpected_keys = s_model.load_state_dict(cur_dict,strict=False)
 
-    s_model.cuda()
-    optimizer = optim.SGD(s_model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-else:
-    s_model = model_dict[args.s_arch](num_classes=100)
-    s_model = nn.DataParallel(s_model)
-    s_model.cuda()
-    optimizer = optim.SGD(s_model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        s_model.cuda()
+        s_model_rank.cuda()
+        optimizer = optim.SGD(s_model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+    else:
+        s_model = model_dict[args.s_arch](num_classes=100)
+        s_model = nn.DataParallel(s_model)
+        s_model.cuda()
+        optimizer = optim.SGD(s_model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     
 
 
 
+if args.rank_reduce:
+    if args.s_arch == "VGG_SNN_STDB":
+        s_model = VGG_SNN_STDB(vgg_name = "VGG16",labels=num_classes, timesteps=args.timesteps,dropout=0.1,dataset=args.dataset)
+        state = torch.load(vgg_stdb_after_distillation_CIFAR100, map_location='cpu')       
+        optimizer =  optim.Adam(s_model.parameters(),
+                        lr=args.lr, amsgrad=True, weight_decay=0, betas=(0.9,0.999))
+        missing_keys, unexpected_keys = s_model.load_state_dict(state['state_dict'],strict=False)
+        print('\n Missing keys : {}, Unexpected Keys: {}'.format(missing_keys, unexpected_keys))
 
+    s_model.cuda()
+    s_model.eval()
+    # optimizer =  optim.Adam(s_model.parameters(),
+    #                 lr=args.lr, amsgrad=True, weight_decay=0, betas=(0.9,0.999))        
+    s_model_rank.cuda()
+    s_model_rank.eval()
+    acc_record = AverageMeter()
+    loss_record = AverageMeter()
+    # for x, target in val_loader:
+
+    #     x = x[:,0,:,:,:].cuda()
+    #     target = target.cuda()
+    #     with torch.no_grad():
+    #         output = s_model(x)
+    #         loss = F.cross_entropy(output, target)
+
+    #     batch_acc = accuracy(output, target, topk=(1,))[0]
+    #     acc_record.update(batch_acc.item(), x.size(0))
+    #     loss_record.update(loss.item(), x.size(0))
+    # info = 'teacher cls_acc:{:.2f}\n'.format(acc_record.avg)
+    # print(info)
+    # exit(1)
+    # handler = s_model.module.features[0].register_forward_hook(get_feature_hook)
+
+
+    if not os.path.exists('./experiments/'+args.s_arch+'_rank_conv_input.npy'):
+
+        acc_record = AverageMeter()
+        loss_record = AverageMeter()
+        feature_result = 0
+        total = 0
+        i = 0
+
+        for x, target in train_loader:
+            x = x[:,0,:,:,:].cuda()
+            target = target.cuda()
+            with torch.no_grad():
+                output,input_rank_sum = s_model(x)
+                print(i)
+                i += 1
+                # print(input_rank_sum.size())
+                # print(input_rank)
+            
+
+                # a = input_rank.shape[0]
+                # b = input_rank.shape[1]
+                # c = torch.tensor([torch.matrix_rank(input_rank[i,j,:,:]/args.timesteps).cuda().item() for i in range(a) for j in range(b)]).cuda()
+                # c = c.view(a, -1).float()
+                # c = c.sum(0)
+                feature_result = feature_result * total + input_rank_sum
+                total = total + input_rank_sum.size(0)
+                feature_result = feature_result / total
+                # print(1,feature_result[0:20])
+                # print(2,feature_result[20:40])
+                # print(3,feature_result[40:63])
+                # print(np.argsort(feature_result.cpu().numpy()))
+
+                if(i == 700):
+                    break
+
+                # loss = F.cross_entropy(output, target)
+
+            # batch_acc = accuracy(output, target, topk=(1,))[0]
+            # acc_record.update(batch_acc.item(), x.size(0))
+            # loss_record.update(loss.item(), x.size(0))
+
+
+        np.save('./experiments/'+args.s_arch+'_rank_conv_input.npy', feature_result.cpu().numpy())
+        feature_result = feature_result.cpu().numpy()
+    
+    else:
+        feature_result = np.load('./experiments/'+args.s_arch+'_rank_conv_input.npy')
+    
+    s_model.module.rank_reduce = False
+    input_weight_size = s_model.module.features[0].weight.size(0)
+    input_weight_size_rank = s_model_rank.module.features[0].weight.size(0)
+    select_index = np.argsort(feature_result)[input_weight_size-input_weight_size_rank:]
+    # print(feature_result[select_index]) 
+    # print(feature_result)
+    # print(select_index)
+    select_index.sort()
+    # print(select_index)
+    s_model_dict = s_model.state_dict()
+    s_model_dict_rank = s_model_rank.state_dict()
+    # s_model_index_input = np.arange(input_weight_size)
+    # s_model_index_input = s_model_index_input[input_weight_size-input_weight_size_rank:]
+
+
+    for index_i, select_i in enumerate(select_index):
+        s_model_dict_rank["module.features.0.weight"][index_i] = \
+        s_model_dict["module.features.0.weight"][select_i]
+
+
+    for i in range(s_model_rank.module.features[3].weight.size(0)):
+        for index_j, select_j in enumerate(select_index):
+            # print(select_j)
+            s_model_dict_rank["module.features.3.weight"][i][index_j]  = \
+            s_model_dict["module.features.3.weight"][i][select_j] 
+
+
+    for key in s_model_dict.keys():
+        if key in s_model_dict_rank.keys():
+            if (s_model_dict[key].shape == s_model_dict_rank[key].shape):
+                s_model_dict_rank[key] = nn.Parameter(s_model_dict[key].data)
+            
+            else:
+                print(key)
+
+
+    
+
+    missing_keys, unexpected_keys = s_model_rank.load_state_dict(s_model_dict_rank,strict=False)
+    print('\n Missing keys : {}, Unexpected Keys: {}'.format(missing_keys, unexpected_keys))
+    acc_record = AverageMeter()
+    loss_record = AverageMeter()
+    for x, target in val_loader:
+
+        x = x[:,0,:,:,:].cuda()
+        target = target.cuda()
+        with torch.no_grad():
+            output = s_model_rank(x)
+            # print(output)
+            loss = F.cross_entropy(output, target)
+
+        batch_acc = accuracy(output, target, topk=(1,))[0]
+        acc_record.update(batch_acc.item(), x.size(0))
+        loss_record.update(loss.item(), x.size(0))
+
+
+    info = 'teacher cls_acc:{:.2f}\n'.format(acc_record.avg)
+    print(info)
+    exit(1)
 
 
 # print('\n Missing keys : {}, Unexpected Keys: {}'.format(missing_keys, unexpected_keys))

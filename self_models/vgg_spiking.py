@@ -296,7 +296,7 @@ class VGG_SNN_STDB(nn.Module):
     
 				self.mem[l] 		= torch.zeros(self.batch_size, self.features[l].out_channels, self.width, self.height).cuda()
 				if(l == 0):
-					self.input_rank = torch.zeros(self.batch_size, self.features[l].out_channels, self.width, self.height).cuda()   
+					self.input_rank = torch.zeros(self.timesteps,self.batch_size, self.features[l].out_channels, self.width, self.height).cuda()   
 			# elif isinstance(self.features[l], nn.ReLU):
 			# 	if isinstance(self.features[l-1], nn.Conv2d):
 			# 		self.spike[l] 	= torch.ones(self.mem[l-1].shape,requires_grad = False)*(-1000)
@@ -402,7 +402,7 @@ class VGG_SNN_STDB(nn.Module):
 					#pdb.set_trace()
 					out 			= self.act_func(mem_thr)
 					if(l==1):
-						self.input_rank += out 
+						self.input_rank[t] = out 
 					# self.spike[l] 	= self.spike[l].masked_fill(out.bool(),t-1)
 					out_prev  		= out.clone()
 
@@ -452,10 +452,17 @@ class VGG_SNN_STDB(nn.Module):
 		if self.rank_reduce:
 			a = self.input_rank.shape[0]
 			b = self.input_rank.shape[1]
-			c = torch.tensor([torch.matrix_rank(self.input_rank[i,j,:,:]/self.timesteps).cuda().item() for i in range(a) for j in range(b)]).cuda()
-			c = c.view(a, -1).float()
-			c = c.sum(0)
-			return self.mem[prev+l+1],c
+			
+			for t in range(self.timesteps):
+				c = torch.tensor([torch.matrix_rank(self.input_rank[t,i,j,:,:]/self.timesteps).cuda().item() for i in range(a) for j in range(b)]).cuda()
+				c = c.view(a, -1).float()
+				if t == 0:
+					c_sum = c.sum(0)
+				else:
+					c_sum += c.sum(0)
+    				
+
+			return self.mem[prev+l+1],c_sum
 			# return self.mem[prev+l+1],self.input_rank
     		
 

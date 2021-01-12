@@ -23,7 +23,10 @@ class VGG(nn.Module):
         self.dataset        = dataset
         self.kernel_size    = kernel_size
         self.dropout        = dropout
+        self.input_compress_rate = input_compress_rate
+        self.rank_reduce    = rank_reduce
         self.features       = self._make_layers(cfg[vgg_name])
+
 
         if vgg_name == 'VGG6' and dataset!= 'MNIST':
             self.classifier = nn.Sequential(
@@ -80,9 +83,25 @@ class VGG(nn.Module):
         
 
     def forward(self, x):
+
+        
+        if self.rank_reduce:
+            out = self.features[0](x)
+            input_rank = self.features[1](out)
+            
+            a = input_rank.shape[0]
+            b = input_rank.shape[1]
+            c = torch.tensor([torch.matrix_rank(input_rank[i,j,:,:]).item() for i in range(a) for j in range(b)])
+            c = c.view(a, -1).float()
+            print(c[0])
+            c_sum = c.sum(0)
+            return 0,c_sum
+
+
         out = self.features(x)
         out = out.view(out.size(0), -1)
         out = self.classifier(out)
+
         return out
 
     def _initialize_weights(self):
@@ -124,18 +143,29 @@ class VGG(nn.Module):
         else:
             in_channels = 3
         
-        for x in cfg:
+        for i,x in enumerate(cfg):
             stride = 1
             
             if x == 'A':
                 layers.pop()
                 layers += [nn.AvgPool2d(kernel_size=2, stride=2)]
             else:
-                layers += [nn.Conv2d(in_channels, x, kernel_size=self.kernel_size, padding=(self.kernel_size-1)//2, stride=stride, bias=False),
-                           nn.ReLU(inplace=True)
-                           ]
+                if (self.input_compress_rate != 0) and (i==0):
+                    layers += [nn.Conv2d(in_channels, int(x*(1-self.input_compress_rate)), kernel_size=self.kernel_size, padding=(self.kernel_size-1)//2, stride=stride, bias=False),
+								nn.ReLU(inplace=True)
+								]
+                    in_channels = int(x*(1-self.input_compress_rate))	
+                
+                else:
+                    layers += [nn.Conv2d(in_channels, int(x), kernel_size=self.kernel_size, padding=(self.kernel_size-1)//2, stride=stride, bias=False),
+                                    nn.ReLU(inplace=True)
+                                    ]	
+                    in_channels = x
+
                 layers += [nn.Dropout(self.dropout)]           
-                in_channels = x
+
+        
+        # print(nn.Sequential(*layers))
 
         
         return nn.Sequential(*layers)
