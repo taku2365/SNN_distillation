@@ -50,7 +50,7 @@ class LinearSpike(torch.autograd.Function):
 
 class VGG_SNN_STDB(nn.Module):
 
-	def __init__(self, vgg_name, activation='Linear', labels=10, timesteps=100, leak=1.0, default_threshold = 1.0, dropout=0.2, kernel_size=3, dataset='CIFAR10', individual_thresh=False, vmem_drop=0,input_compress_rate=0,rank_reduce=False):
+	def __init__(self, vgg_name, activation='Linear', labels=10, timesteps=100, leak=1.0, default_threshold = 1.0, dropout=0.2, kernel_size=3, dataset='CIFAR10', individual_thresh=False, vmem_drop=0,input_compress_num=0,rank_reduce=False):
 		super().__init__()
 		
 		self.vgg_name 		= vgg_name
@@ -72,7 +72,7 @@ class VGG_SNN_STDB(nn.Module):
 		self.mem 			= {}
 		self.mask 			= {}
 		self.spike 			= {}
-		self.input_compress_rate = input_compress_rate
+		self.input_compress_num = input_compress_num
 		self.rank_reduce   = rank_reduce
 		self.features, self.classifier = self._make_layers(cfg[self.vgg_name])
 		
@@ -192,11 +192,11 @@ class VGG_SNN_STDB(nn.Module):
 				layers += [nn.AvgPool2d(kernel_size=2, stride=2)]
 			
 			else:	
-				if (self.input_compress_rate != 0) and (i==0):
-					layers += [nn.Conv2d(in_channels, int(x*(1-self.input_compress_rate)), kernel_size=self.kernel_size, padding=(self.kernel_size-1)//2, stride=stride, bias=False),
+				if (self.input_compress_num != 0) and (i==0):
+					layers += [nn.Conv2d(in_channels, int(x-self.input_compress_num), kernel_size=self.kernel_size, padding=(self.kernel_size-1)//2, stride=stride, bias=False),
 								nn.ReLU(inplace=True)
 								]	
-					in_channels = int(x*(1-self.input_compress_rate))		
+					in_channels = int(x-self.input_compress_num)		
 							
     			
 				else:
