@@ -6,7 +6,7 @@
 # python snn_reduce_channel.py --t-path ./experiments/teacher_ResNet50_seed0_CIFAR100/ --s-arch VGG_SNN_STDB --lr 0.0005 --gpu-id "0,1" --milestones 15 30  --epoch 100  --after_distillation Ture --dataset CIFAR100 
 # python snn_reduce_channel.py --t-path ./experiments/teacher_wrn_40_2_seed0_CIFAR10/ --s-arch VGG_SNN_STDB --lr 0.0005 --gpu-id "0,1" --milestones 250 350 400 --epoch 500   --dataset CIFAR10 
 # sskd_student_VGG_SNN_STDB_weight0.1+0.9+2.7+10.0_T4.0+4.0+0.5_ratio1.0+0.75_seed0_teacher_wrn_40_2_seed0 74.63%  t wideresnet40_2   VGG after_distillation 75~
-
+# \\arch\htdocs\Publications\2021\all-mtg\LT\submission
 import os
 import os.path as osp
 import argparse
@@ -29,8 +29,8 @@ from cifar import CIFAR100_aug,CIFAR10_aug
 from torchvision.datasets import CIFAR100,CIFAR10
 from self_models import *
 from self_models import model_dict
-
-
+from flops.ptflops import *
+import matplotlib.pyplot as plt
 
 torch.backends.cudnn.benchmark = True
 
@@ -91,9 +91,10 @@ exp_name = 'sskd_student_{}_weight{}+{}+{}+{}_T{}+{}+{}_ratio{}+{}_seed{}_{}_tim
             args.ratio_tf, args.ratio_ss, \
             args.seed, t_name,args.timesteps)
 exp_path_t = './experiments/{}'.format(exp_name)
-print(exp_path_t)
+# print(exp_path_t)
 os.makedirs(exp_path_t, exist_ok=True)
-
+linear_flops = []
+conv_flops = []
 vgg_after_distillation_CIFAR100= "./experiments/sskd_student_VGG16_weight0.1+0.9+2.7+10.0_T4.0+4.0+0.5_ratio1.0+0.75_seed0_teacher_wrn_40_2_seed0_retrain/ckpt/student_best.pth"
 vgg_stdb_after_distillation_CIFAR100= "./experiments/sskd_student_VGG_SNN_STDB_weight0.1+0.9+2.7+10.0_T4.0+4.0+0.5_ratio1.0+0.75_seed0_teacher_ResNet50_seed0_CIFAR100_timesteps5/ckpt/student_best.pth"
 
@@ -163,6 +164,47 @@ start = time.time()
 
 
 
+def linear_flops_counter_hook(module, input, output):
+    global linear_flops 
+    input = input[0]
+    # pytorch checks dimensions, so here we don't care much
+    output_last_dim = output.shape[-1]
+    bias_flops = output_last_dim if module.bias is not None else 0
+    # module.__flops__ += int(np.prod(input.shape) * output_last_dim + bias_flops)
+    linear_flops.append(int(np.prod(input.shape) * output_last_dim + bias_flops))
+
+def conv_flops_counter_hook(conv_module, input, output):
+    # Can have multiple inputs, getting the first one
+    global conv_flops
+    input = input[0]
+    # print(conv_module)
+    batch_size = input.shape[0]
+    output_dims = list(output.shape[2:])
+
+    kernel_dims = list(conv_module.kernel_size)
+    in_channels = conv_module.in_channels
+    out_channels = conv_module.out_channels
+    groups = conv_module.groups
+
+    filters_per_channel = out_channels // groups
+    conv_per_position_flops = int(np.prod(kernel_dims)) * \
+        in_channels * filters_per_channel
+
+    active_elements_count = batch_size * int(np.prod(output_dims))
+
+    overall_conv_flops = conv_per_position_flops * active_elements_count
+
+    bias_flops = 0
+
+    if conv_module.bias is not None:
+
+        bias_flops = out_channels * active_elements_count
+
+    overall_flops = overall_conv_flops + bias_flops
+
+    # conv_module.__flops__ += int(overall_flops)
+    # print(conv_module,int(overall_flops),conv_per_position_flops,active_elements_count,output_dims,output.shape)
+    conv_flops.append(int(overall_flops))
 
 
 # net_name = "RESNET20_BATCH_NORM",labels=100, timesteps=5,dropout=0.3, dataset="CIFAR100",t_divede=5)
@@ -170,12 +212,55 @@ if args.s_arch == "VGG_SNN_STDB":
     # if args.retrain:
     #     state = torch.load("{}/ckpt/student_best.pth".format(exp_path_t), map_location='cpu') 
     s_model = VGG_SNN_STDB(vgg_name = "VGG16",labels=num_classes, timesteps=args.timesteps,dropout=0.1,dataset=args.dataset)
-    s_model = nn.DataParallel(s_model)
+    op_counter=True
+    if(op_counter):
+        s_model.to("cuda")
+        hook_handles = []
+
+        for layer in s_model.modules():
+            
+            if isinstance(layer, torch.nn.modules.conv.Conv2d):
+                handle = layer.register_forward_hook(conv_flops_counter_hook)
+                hook_handles.append(handle)
+
+            elif isinstance(layer,nn.Linear):
+                handle = layer.register_forward_hook(linear_flops_counter_hook)
+                hook_handles.append(handle)
+
+        
+        dsize = (1, 3, 32, 32)
+        inputs = torch.randn(dsize).to("cuda")
+        s_model(inputs)
+
+        
+        # print(linear_flops[:int(len(linear_flops)/args.timesteps)])
+        # print("conv flops len",len(conv_flops[:int(len(conv_flops)/args.timesteps)]))
+
+        conv_flops = conv_flops[:int(len(conv_flops)/args.timesteps)]
+        linear_flops = linear_flops[:int(len(linear_flops)/args.timesteps)-1]
+        
+
+            
+
+        # with torch.cuda.device(0):
+            
+        #     macs, params = get_model_complexity_info(s_model, (3, 32, 32), as_strings=True,
+        #                                     print_per_layer_stat=True, verbose=True)
+        
+        # print('{:<30}  {:<8}'.format('Computational complexity: ', macs))
+        # print('{:<30}  {:<8}'.format('Number of parameters: ', params))
+        # exit(1)
+    s_model = VGG_SNN_STDB(vgg_name = "VGG16",labels=num_classes, timesteps=args.timesteps,dropout=0.1,dataset=args.dataset,cal_neuron=True)
+    s_model = nn.DataParallel(s_model)    
     s_model_rank = VGG_SNN_STDB(vgg_name = "VGG16",labels=num_classes, timesteps=args.timesteps,dropout=0.1,dataset=args.dataset,input_compress_num=1)
     s_model_rank = nn.DataParallel(s_model_rank)    
     s_model_rank1 = VGG_SNN_STDB(vgg_name = "VGG16",labels=num_classes, timesteps=args.timesteps,dropout=0.1,dataset=args.dataset,input_compress_num=2)
     s_model_rank1 = nn.DataParallel(s_model_rank1)
-    # s_model.cuda()
+    print(repr(s_model))
+
+
+
+    s_model.cuda()
     if args.after_distillation:
         if args.dataset == "CIFAR100":
             state = torch.load(vgg_after_distillation_CIFAR100,map_location='cpu')
@@ -190,13 +275,120 @@ if args.s_arch == "VGG_SNN_STDB":
 
     thresholds = state['thresholds']
     print(thresholds)
-
     missing_keys, unexpected_keys = s_model.load_state_dict(state['state_dict'],strict=False)
     print('\n Missing keys : {}, Unexpected Keys: {}'.format(missing_keys, unexpected_keys))
 
     s_model.cuda()
     optimizer =  optim.Adam(s_model.parameters(),
                         lr=args.lr, amsgrad=True, weight_decay=0, betas=(0.9,0.999))
+
+    
+    acc_record.reset()
+    loss_record.reset()
+    s_model.eval()
+
+
+    state = torch.load(vgg_stdb_after_distillation_CIFAR100, map_location='cpu') 
+    optimizer =  optim.Adam(s_model.parameters(),
+                    lr=args.lr, amsgrad=True, weight_decay=0, betas=(0.9,0.999))
+    missing_keys, unexpected_keys = s_model.load_state_dict(state['state_dict'],strict=False)
+    s_model.module.rank_reduce = False
+    print('\n Missing keys : {}, Unexpected Keys: {}'.format(missing_keys, unexpected_keys))
+    s_model.cuda()
+    s_model.eval()
+    # optimizer =  optim.Adam(s_model.parameters(),
+    #                 lr=args.lr, amsgrad=True, weight_decay=0, betas=(0.9,0.999))        
+    s_model_rank.cuda()
+    s_model_rank.eval()
+    s_model_rank1.cuda()
+    s_model_rank1.eval()
+    acc_record = AverageMeter()
+    loss_record = AverageMeter()
+
+
+
+    # dsize = (1, 3, 224, 224)
+
+    # inputs = torch.randn(dsize)
+    # total_ops, total_params = profile(s_model, (inputs,), verbose=False)
+    # print("%s | %.2f | %.2f" % ("VGG_SNN", total_params / (1000 ** 2), total_ops / (1000 ** 3)))
+
+    s_model_dict = s_model.state_dict()
+    s_model_dict_rank = s_model_rank.state_dict()
+    tmp_len = 0
+    E_ANN = 0
+    E_SNN = 0
+    flops1 = np.concatenate((conv_flops,linear_flops))
+
+
+    for x, target in val_loader:
+        tmp_len += 1 
+        x = x[:,0,:,:,:].cuda()
+        target = target.cuda()
+        with torch.no_grad():
+            output,spike_rate_conv,spike_rate_linear = s_model(x)
+            spike_rate = np.concatenate((spike_rate_conv,spike_rate_linear))
+  
+            FLOPs_conv_ANN = np.sum(conv_flops)
+            FLOPs_conv_SNN = np.sum(conv_flops*spike_rate_conv)
+            FLOPs_linear_ANN = np.sum(linear_flops)
+            FLOPs_linear_SNN = np.sum(linear_flops*spike_rate_linear)
+            E_ANN += (FLOPs_conv_ANN+FLOPs_linear_ANN)*4.6
+            E_SNN += (FLOPs_conv_SNN+FLOPs_linear_SNN)*0.9
+            # print("E rate",E_ANN/E_SNN)
+            
+            # print(output)
+            # print(spike_rate)
+            loss = F.cross_entropy(output, target)
+
+    
+    print(np.mean(spike_rate))
+    print(np.sum(flops1*spike_rate)/np.sum(flops1))
+    print(E_ANN/E_SNN)
+
+    plt.gca().yaxis.set_major_formatter(plt.FormatStrFormatter('%.1f'))#y軸小数点以下3桁表示
+    # plt.gca().xaxis.get_major_formatter().set_useOffset(False)
+    left = np.arange(len(spike_rate))
+    plt.title("Spike rate for each layer")
+    plt.xlabel("Layer [l]")
+    plt.ylabel("Spike Rate R(l)")
+    plt.bar(left, spike_rate)
+    plt.savefig("Spike_Rate.png")
+
+    plt.gca().yaxis.set_major_formatter(plt.FormatStrFormatter('%.1f'))#y軸小数点以下3桁表示
+    # plt.gca().xaxis.get_major_formatter().set_useOffset(False)
+    plt.title("Conv + linear FLOPs")
+    plt.xlabel("Layer [l]")
+    plt.ylabel("MFlops")
+    ANN_conv_Mflops = []
+    SNN_conv_Mflops = []
+    left = np.arange(len(flops1))
+    for i,flops in enumerate(flops1):
+        ANN_conv_Mflops.append(flops/10.**6)
+        SNN_conv_Mflops.append(spike_rate[i]*flops/10.**6)
+
+    plt.bar(left, ANN_conv_Mflops,label="ANN")
+    plt.bar(left,SNN_conv_Mflops,label="SNN")
+    plt.legend(bbox_to_anchor=(1, 1), loc='upper right', borderaxespad=0, fontsize=12)
+    plt.savefig("conv_flops.png")
+
+
+    batch_acc = accuracy(output, target, topk=(1,))[0]
+    acc_record.update(batch_acc.item(), x.size(0))
+    loss_record.update(loss.item(), x.size(0))
+
+
+    info = 'cls_acc:{:.2f}\n'.format(acc_record.avg)
+    print(info)
+    exit(1)
+
+    s_model.module.cal_neuron = False
+
+
+    
+
+
+ 
     
     
 
@@ -224,6 +416,9 @@ if args.s_arch == "VGG_SNN_STDB":
 
         s_model_dict = s_model.state_dict()
         s_model_dict_rank = s_model_rank.state_dict()
+
+
+
     
 
         input_compress_tmp = 0
@@ -402,13 +597,6 @@ if args.s_arch == "VGG_SNN_STDB":
                 info = 'teacher cls_acc:{:.2f}\n'.format(acc_record.avg)
                 print(info) 
 
-                
-
-                optimizer = optim.Adam(s_model_rank1.parameters(),
-                            lr=args.lr,
-                            amsgrad=True, weight_decay=0, betas=(0.9,0.999))
-
-                scheduler = MultiStepLR(optimizer, milestones=args.milestones, gamma=args.gamma)
                 best_acc = 0
 
                 acc_record.reset()

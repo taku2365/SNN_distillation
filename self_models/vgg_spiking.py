@@ -50,7 +50,7 @@ class LinearSpike(torch.autograd.Function):
 
 class VGG_SNN_STDB(nn.Module):
 
-	def __init__(self, vgg_name, activation='Linear', labels=10, timesteps=100, leak=1.0, default_threshold = 1.0, dropout=0.2, kernel_size=3, dataset='CIFAR10', individual_thresh=False, vmem_drop=0,input_compress_num=0,rank_reduce=False):
+	def __init__(self, vgg_name, activation='Linear', labels=10, timesteps=100, leak=1.0, default_threshold = 1.0, dropout=0.2, kernel_size=3, dataset='CIFAR10', individual_thresh=False, vmem_drop=0,input_compress_num=0,rank_reduce=False,cal_neuron=False):
 		super().__init__()
 		
 		self.vgg_name 		= vgg_name
@@ -60,6 +60,7 @@ class VGG_SNN_STDB(nn.Module):
 			self.act_func	= STDB.apply
 		self.labels 		= labels
 		self.timesteps 		= timesteps
+		self.cal_neuron     = cal_neuron
 		#STDB.alpha 		 	= alpha
 		#STDB.beta 			= beta 
 		self.dropout 		= dropout
@@ -70,6 +71,10 @@ class VGG_SNN_STDB(nn.Module):
 		#self.threshold 		= nn.ParameterDict()
 		#self.leak 			= nn.ParameterDict()
 		self.mem 			= {}
+		self.mem_thr_tmp_conv 	= {}
+		self.all_neuron_num_conv = {}		
+		self.mem_thr_tmp_linear 	= {}
+		self.all_neuron_num_linear = {}
 		self.mask 			= {}
 		self.spike 			= {}
 		self.input_compress_num = input_compress_num
@@ -287,6 +292,7 @@ class VGG_SNN_STDB(nn.Module):
 		self.height 	= x.size(3)			
 		
 		self.mem 	= {}
+		self.mem_thra 	= {}
 		self.spike 	= {}
 		self.mask 	= {}
 
@@ -366,7 +372,11 @@ class VGG_SNN_STDB(nn.Module):
 		
 		self.neuron_init(x)
 		max_mem=0.0
-		midle_features = {}
+		self.mem_thr_tmp_conv 	= {}
+		self.all_neuron_num_conv = {}		
+		self.mem_thr_tmp_linear 	= {}
+		self.all_neuron_num_linear = {}
+		# midle_features = {}
 		# if find_max_mem:
 		# 	prob=self.vmem_drop
 		# else:
@@ -391,6 +401,7 @@ class VGG_SNN_STDB(nn.Module):
 							max_mem = torch.tensor([cur])
 						break
 					delta_mem 		= self.features[l](out_prev)
+					# print(delta_mem)
 					self.mem[l] 	= getattr(self.leak, 'l'+str(l)) *self.mem[l] + delta_mem
 					mem_thr 		= (self.mem[l]/getattr(self.threshold, 't'+str(l))) - 1.0
 					rst 			= getattr(self.threshold, 't'+str(l)) * (mem_thr>0).float()
@@ -401,10 +412,25 @@ class VGG_SNN_STDB(nn.Module):
 				elif isinstance(self.features[l], nn.ReLU):
 					#pdb.set_trace()
 					out 			= self.act_func(mem_thr)
-					if(l==1):
-						self.input_rank[t] = out 
+
+					if(self.cal_neuron):
+						if(t==0):
+							self.all_neuron_num_conv[l] =  out.size()[0]*out.size()[1]*out.size()[2]*out.size()[3]
+							self.mem_thr_tmp_conv[l] = out.sum().to('cpu').detach().numpy().copy()
+
+							
+						else:
+							self.mem_thr_tmp_conv[l] += out.sum().to('cpu').detach().numpy().copy()
+
+
+
+
+
 					# self.spike[l] 	= self.spike[l].masked_fill(out.bool(),t-1)
 					out_prev  		= out.clone()
+					# print(out_prev.sum())
+					# print(out_prev.size()[0]*out_prev.size()[1]*out_prev.size()[2]*out_prev.size()[3])
+					# print(out_prev.size())
 
 				elif isinstance(self.features[l], nn.AvgPool2d):
 					out_prev 		= self.features[l](out_prev)
@@ -431,14 +457,25 @@ class VGG_SNN_STDB(nn.Module):
 					delta_mem 			= self.classifier[l](out_prev)
 					self.mem[prev+l] 	= getattr(self.leak, 'l'+str(prev+l)) * self.mem[prev+l] + delta_mem
 					mem_thr 			= (self.mem[prev+l]/getattr(self.threshold, 't'+str(prev+l))) - 1.0
+	
 					rst 				= getattr(self.threshold,'t'+str(prev+l)) * (mem_thr>0).float()
 					self.mem[prev+l] 	= self.mem[prev+l]-rst
 
 				
 				elif isinstance(self.classifier[l], nn.ReLU):
 					out 				= self.act_func(mem_thr)
+
+					if(self.cal_neuron):
+						if(t==0):
+							self.all_neuron_num_linear[l] =  out.size()[0]*out.size()[1]
+							self.mem_thr_tmp_linear[l] = out.sum().to('cpu').detach().numpy().copy()
+							
+						else:
+							self.mem_thr_tmp_linear[l] += out.sum().to('cpu').detach().numpy().copy()
+							
 					# self.spike[prev+l] 	= self.spike[prev+l].masked_fill(out.bool(),t-1)
 					out_prev  			= out.clone()
+			
 
 				elif isinstance(self.classifier[l], nn.Dropout):
 					out_prev 		= out_prev * self.mask[prev+l]
@@ -446,6 +483,7 @@ class VGG_SNN_STDB(nn.Module):
 			# Compute the classification layer outputs
 			if not find_max_mem:
 				self.mem[prev+l+1] 		= self.mem[prev+l+1] + self.classifier[l+1](out_prev)
+
 		if find_max_mem:
 			return max_mem
 		
@@ -464,7 +502,34 @@ class VGG_SNN_STDB(nn.Module):
 
 			return self.mem[prev+l+1],c_sum
 			# return self.mem[prev+l+1],self.input_rank
-    		
+    	
+		# print("\n")
+		# print(self.mem_thr_tmp)
+		# print("\n")
+		# print(self.all_neuron_num)
+		# print("\n")
+		# print("divide",self.mem_thr_tmp[19]/self.all_neuron_num[19])
+
+		# self.mem_thr_tmp = self.mem_thr_tmp.values
+		# self.all_neuron_num = self.all_neuron_num.values
+
+		# print(self.mem_thr_tmp/self.all_neuron_num)
+
+		if(self.cal_neuron):
+			self.mem_thr_tmp_conv =  list(self.mem_thr_tmp_conv.values())
+			self.all_neuron_num_conv = list(self.all_neuron_num_conv.values())			
+			self.mem_thr_tmp_linear =  list(self.mem_thr_tmp_linear.values())
+			self.all_neuron_num_linear = list(self.all_neuron_num_linear.values())
+
+			spike_rate_conv = np.array(self.mem_thr_tmp_conv)/np.array(self.all_neuron_num_conv)
+			spike_rate_linear = np.array(self.mem_thr_tmp_linear)/np.array(self.all_neuron_num_linear)
+
+			
+			# print(spike_rate)
+
+			return self.mem[prev+l+1],spike_rate_conv,spike_rate_linear
+
+		
 
 
 		return self.mem[prev+l+1]
