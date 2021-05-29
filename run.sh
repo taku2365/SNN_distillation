@@ -7,7 +7,7 @@ then
     --vgg_stdb_after_distillation=./experiments/sskd_student_VGG_SNN_STDB_weight0.1+0.9+2.7+10.0_T4.0+4.0+0.5_ratio1.0+0.75_seed0_teacher_ResNet50_seed0_CIFAR100_timesteps5/ckpt/student_best.pth
 elif [ "$1" = "test" ]
 then
-    echo "test !!"
+    echo "test !!!"
 
 elif [ "$1" = "float_calculation" ]
 then
