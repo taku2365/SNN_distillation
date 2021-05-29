@@ -95,8 +95,8 @@ exp_path_t = './experiments/{}'.format(exp_name)
 os.makedirs(exp_path_t, exist_ok=True)
 linear_flops = []
 conv_flops = []
-vgg_after_distillation_CIFAR100= "./experiments/sskd_student_VGG16_weight0.1+0.9+2.7+10.0_T4.0+4.0+0.5_ratio1.0+0.75_seed0_teacher_wrn_40_2_seed0_retrain/ckpt/student_best.pth"
-vgg_stdb_after_distillation_CIFAR100= "./experiments/sskd_student_VGG_SNN_STDB_weight0.1+0.9+2.7+10.0_T4.0+4.0+0.5_ratio1.0+0.75_seed0_teacher_ResNet50_seed0_CIFAR100_timesteps5/ckpt/student_best.pth"
+vgg_after_distillation_CIFAR100= args.vgg_after_distillation
+vgg_stdb_after_distillation_CIFAR100= args.vgg_stdb_after_distillation
 
 if args.dataset == 'CIFAR100':
     normalize   = transforms.Normalize((0.5071,0.4867,0.4408),(0.2675,0.2565,0.2761))
@@ -380,7 +380,6 @@ if args.s_arch == "VGG_SNN_STDB":
 
     info = 'cls_acc:{:.2f}\n'.format(acc_record.avg)
     print(info)
-    exit(1)
 
     s_model.module.cal_neuron = False
 

@@ -2,8 +2,8 @@
 # Imports
 #---------------------------------------------------
 
-#python snn.py --dataset CIFAR10 --epoch 300 --batch_size 64 --architecture VGG16 --learning_rate 1e-4 --epochs 10 --lr_interval '0.60 0.80 0.90' --lr_reduce 5 --timesteps 10 --leak 1.0 --scaling_factor 0.6 --optimizer Adam --weight_decay 0 --momentum 0 --amsgrad True --dropout 0.1 --train_acc_batches 50 --default_threshold 1.0 --pretrained_ann trained_models/ann_vgg16_cifar10_best_model1.pth
-#python snn.py --dataset CIFAR100 --epoch 300 --batch_size 64 --architecture VGG16 --learning_rate 5e-4 --epochs 300 --lr_interval '0.60 0.80 0.90' --lr_reduce 10 --timesteps 5 --leak 1.0 --scaling_factor 0.6 --optimizer Adam --weight_decay 0 --momentum 0 --amsgrad True --dropout 0.1 --default_threshold 1.0 --pretrained_ann trained_models/ann_vgg16_cifar100_best_model.pth
+#python snn.py --dataset CIFAR10 --epoch 300 --batch_size 64 --devices "0,1" --architecture VGG16 --learning_rate 1e-4 --epochs 10 --lr_interval '0.60 0.80 0.90' --lr_reduce 5 --timesteps 5 --leak 1.0 --scaling_factor 0.6 --optimizer Adam --weight_decay 0 --momentum 0 --amsgrad True --dropout 0.1 --train_acc_batches 50 --default_threshold 1.0 --pretrained_ann trained_models/ann_vgg16_cifar10_best_model1.pth
+#python snn.py --dataset CIFAR100 --batch_size 16 --devices "0,1" --architecture VGG16 --learning_rate 1e-4 --epochs 100 --lr_interval '0.60 0.80 0.90' --lr_reduce 10 --timesteps 5 --leak 1.0 --scaling_factor 0.6 --optimizer Adam --weight_decay 0 --momentum 0 --amsgrad True --dropout 0.1 --default_threshold 1.0 --pretrained_ann experiments/ann_vgg16_cifar100_best_model.pth
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -301,8 +301,7 @@ class VGG_SNN_STDB(nn.Module):
 			if isinstance(self.features[l], nn.Conv2d):
     
 				self.mem[l] 		= torch.zeros(self.batch_size, self.features[l].out_channels, self.width, self.height).cuda()
-				if(l == 0):
-					self.input_rank = torch.zeros(self.timesteps,self.batch_size, self.features[l].out_channels, self.width, self.height).cuda()   
+
 			# elif isinstance(self.features[l], nn.ReLU):
 			# 	if isinstance(self.features[l-1], nn.Conv2d):
 			# 		self.spike[l] 	= torch.ones(self.mem[l-1].shape,requires_grad = False)*(-1000)
