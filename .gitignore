@@ -1,3 +1,8 @@
 cifar_data/
 trained_models/
 self_models/__pycache__
+imagenet
+experiments
+cifar_data
+data
+__pycache__

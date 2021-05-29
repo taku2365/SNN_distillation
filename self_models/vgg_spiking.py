@@ -2,8 +2,8 @@
 # Imports
 #---------------------------------------------------
 
-#python snn.py --dataset CIFAR10 --epoch 300 --batch_size 64 --architecture VGG16 --learning_rate 1e-4 --epochs 10 --lr_interval '0.60 0.80 0.90' --lr_reduce 5 --timesteps 10 --leak 1.0 --scaling_factor 0.6 --optimizer Adam --weight_decay 0 --momentum 0 --amsgrad True --dropout 0.1 --train_acc_batches 50 --default_threshold 1.0 --pretrained_ann trained_models/ann_vgg16_cifar10_best_model1.pth
-#python snn.py --dataset CIFAR100 --epoch 300 --batch_size 64 --architecture VGG16 --learning_rate 1e-4 --epochs 10 --lr_interval '0.60 0.80 0.90' --lr_reduce 5 --timesteps 10 --leak 1.0 --scaling_factor 0.6 --optimizer Adam --weight_decay 0 --momentum 0 --amsgrad True --dropout 0.1 --train_acc_batches 50 --default_threshold 1.0 --pretrained_ann trained_models/ann_vgg16_cifar100_best_model.pth
+#python snn.py --dataset CIFAR10 --epoch 300 --batch_size 64 --devices "0,1" --architecture VGG16 --learning_rate 1e-4 --epochs 10 --lr_interval '0.60 0.80 0.90' --lr_reduce 5 --timesteps 5 --leak 1.0 --scaling_factor 0.6 --optimizer Adam --weight_decay 0 --momentum 0 --amsgrad True --dropout 0.1 --train_acc_batches 50 --default_threshold 1.0 --pretrained_ann trained_models/ann_vgg16_cifar10_best_model1.pth
+#python snn.py --dataset CIFAR100 --batch_size 16 --devices "0,1" --architecture VGG16 --learning_rate 1e-4 --epochs 100 --lr_interval '0.60 0.80 0.90' --lr_reduce 10 --timesteps 5 --leak 1.0 --scaling_factor 0.6 --optimizer Adam --weight_decay 0 --momentum 0 --amsgrad True --dropout 0.1 --default_threshold 1.0 --pretrained_ann experiments/ann_vgg16_cifar100_best_model.pth
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -33,7 +33,7 @@ class LinearSpike(torch.autograd.Function):
     gamma = 0.3 # Controls the dampening of the piecewise-linear surrogate gradient
 
     @staticmethod
-    def forward(ctx, input, last_spike):
+    def forward(ctx, input):
         
         ctx.save_for_backward(input)
         out = torch.zeros_like(input).cuda()
@@ -50,7 +50,7 @@ class LinearSpike(torch.autograd.Function):
 
 class VGG_SNN_STDB(nn.Module):
 
-	def __init__(self, vgg_name, activation='Linear', labels=10, timesteps=100, leak=1.0, default_threshold = 1.0, dropout=0.2, kernel_size=3, dataset='CIFAR10', individual_thresh=False, vmem_drop=0):
+	def __init__(self, vgg_name, activation='Linear', labels=10, timesteps=100, leak=1.0, default_threshold = 1.0, dropout=0.2, kernel_size=3, dataset='CIFAR10', individual_thresh=False, vmem_drop=0,input_compress_num=0,rank_reduce=False,cal_neuron=False):
 		super().__init__()
 		
 		self.vgg_name 		= vgg_name
@@ -60,6 +60,7 @@ class VGG_SNN_STDB(nn.Module):
 			self.act_func	= STDB.apply
 		self.labels 		= labels
 		self.timesteps 		= timesteps
+		self.cal_neuron     = cal_neuron
 		#STDB.alpha 		 	= alpha
 		#STDB.beta 			= beta 
 		self.dropout 		= dropout
@@ -70,9 +71,14 @@ class VGG_SNN_STDB(nn.Module):
 		#self.threshold 		= nn.ParameterDict()
 		#self.leak 			= nn.ParameterDict()
 		self.mem 			= {}
+		self.mem_thr_tmp_conv 	= {}
+		self.all_neuron_num_conv = {}		
+		self.mem_thr_tmp_linear 	= {}
+		self.all_neuron_num_linear = {}
 		self.mask 			= {}
 		self.spike 			= {}
-		
+		self.input_compress_num = input_compress_num
+		self.rank_reduce   = rank_reduce
 		self.features, self.classifier = self._make_layers(cfg[self.vgg_name])
 		
 		self._initialize_weights2()
@@ -183,19 +189,31 @@ class VGG_SNN_STDB(nn.Module):
 		else:
 			in_channels = 3
 
-		for x in (cfg):
+		for i,x in enumerate(cfg):
 			stride = 1
 						
 			if x == 'A':
 				layers.pop()
 				layers += [nn.AvgPool2d(kernel_size=2, stride=2)]
 			
-			else:
-				layers += [nn.Conv2d(in_channels, x, kernel_size=self.kernel_size, padding=(self.kernel_size-1)//2, stride=stride, bias=False),
-							nn.ReLU(inplace=True)
-							]
+			else:	
+				if (self.input_compress_num != 0) and (i==0):
+					layers += [nn.Conv2d(in_channels, int(x-self.input_compress_num), kernel_size=self.kernel_size, padding=(self.kernel_size-1)//2, stride=stride, bias=False),
+								nn.ReLU(inplace=True)
+								]	
+					in_channels = int(x-self.input_compress_num)		
+							
+    			
+				else:
+					layers += [nn.Conv2d(in_channels, x, kernel_size=self.kernel_size, padding=(self.kernel_size-1)//2, stride=stride, bias=False),
+									nn.ReLU(inplace=True)
+								]
+					in_channels = x    				
+					
+					
 				layers += [nn.Dropout(self.dropout)]
-				in_channels = x
+    				
+    				
 
 		if self.dataset== 'IMAGENET':
 			layers.pop()
@@ -274,19 +292,21 @@ class VGG_SNN_STDB(nn.Module):
 		self.height 	= x.size(3)			
 		
 		self.mem 	= {}
+		self.mem_thra 	= {}
 		self.spike 	= {}
 		self.mask 	= {}
 
 		for l in range(len(self.features)):
 								
 			if isinstance(self.features[l], nn.Conv2d):
-				self.mem[l] 		= torch.zeros(self.batch_size, self.features[l].out_channels, self.width, self.height)
-			
-			elif isinstance(self.features[l], nn.ReLU):
-				if isinstance(self.features[l-1], nn.Conv2d):
-					self.spike[l] 	= torch.ones(self.mem[l-1].shape)*(-1000)
-				elif isinstance(self.features[l-1], nn.AvgPool2d):
-					self.spike[l] 	= torch.ones(self.batch_size, self.features[l-2].out_channels, self.width, self.height)*(-1000)
+    
+				self.mem[l] 		= torch.zeros(self.batch_size, self.features[l].out_channels, self.width, self.height).cuda()
+
+			# elif isinstance(self.features[l], nn.ReLU):
+			# 	if isinstance(self.features[l-1], nn.Conv2d):
+			# 		self.spike[l] 	= torch.ones(self.mem[l-1].shape,requires_grad = False)*(-1000)
+			# 	elif isinstance(self.features[l-1], nn.AvgPool2d):
+			# 		self.spike[l] 	= torch.ones(self.batch_size, self.features[l-2].out_channels, self.width, self.height,requires_grad = False)*(-1000)
 
 			elif isinstance(self.features[l], nn.Dropout):
 				self.mask[l] = self.features[l](torch.ones(self.mem[l-2].shape).cuda())
@@ -300,10 +320,10 @@ class VGG_SNN_STDB(nn.Module):
 		for l in range(len(self.classifier)):
 			
 			if isinstance(self.classifier[l], nn.Linear):
-				self.mem[prev+l] 		= torch.zeros(self.batch_size, self.classifier[l].out_features)
+				self.mem[prev+l] 		= torch.zeros(self.batch_size, self.classifier[l].out_features).cuda()
 			
-			elif isinstance(self.classifier[l], nn.ReLU):
-				self.spike[prev+l] 		= torch.ones(self.mem[prev+l-1].shape)*(-1000)
+			# elif isinstance(self.classifier[l], nn.ReLU):
+			# 	self.spike[prev+l] 		= torch.ones(self.mem[prev+l-1].shape,requires_grad = False)*(-1000)
 
 			elif isinstance(self.classifier[l], nn.Dropout):
 				self.mask[prev+l] = self.classifier[l](torch.ones(self.mem[prev+l-2].shape).cuda())
@@ -347,10 +367,15 @@ class VGG_SNN_STDB(nn.Module):
 		
 		return new_tensor
 
-	def forward(self, x, find_max_mem=False, max_mem_layer=0, percentile=99.7):
+	def forward(self, x, find_max_mem=False, is_feat=False,max_mem_layer=0, percentile=99.7):
 		
 		self.neuron_init(x)
 		max_mem=0.0
+		self.mem_thr_tmp_conv 	= {}
+		self.all_neuron_num_conv = {}		
+		self.mem_thr_tmp_linear 	= {}
+		self.all_neuron_num_linear = {}
+		# midle_features = {}
 		# if find_max_mem:
 		# 	prob=self.vmem_drop
 		# else:
@@ -367,34 +392,44 @@ class VGG_SNN_STDB(nn.Module):
 			# print()
 			# input()
 			for l in range(len(self.features)):
-				#if l==27:
-				#	pdb.set_trace()
 				if isinstance(self.features[l], (nn.Conv2d)):
 					
 					if find_max_mem and l==max_mem_layer:
-						#if t==9:
-							#pdb.set_trace()
 						cur = self.percentile(self.features[l](out_prev).view(-1), percentile)
 						if (cur>max_mem):
 							max_mem = torch.tensor([cur])
 						break
-					
-					#mem_thr 		= (self.mem[l]/getattr(self.threshold, 't'+str(l))) - 1.0
-					#rst 			= getattr(self.threshold, 't'+str(l)) * (mem_thr>0).float()
-					#self.mem[l] 	= getattr(self.leak, 'l'+str(l)) *self.mem[l] + self.features[l](out_prev) - rst
-					#delta_mem 		= self.custom_dropout(self.features[l](out_prev), prob=prob, conv=True)
 					delta_mem 		= self.features[l](out_prev)
+					# print(delta_mem)
 					self.mem[l] 	= getattr(self.leak, 'l'+str(l)) *self.mem[l] + delta_mem
 					mem_thr 		= (self.mem[l]/getattr(self.threshold, 't'+str(l))) - 1.0
 					rst 			= getattr(self.threshold, 't'+str(l)) * (mem_thr>0).float()
 					self.mem[l] 	= self.mem[l]-rst
 					#out_prev 		= self.features[l](out_prev)
+
 					
 				elif isinstance(self.features[l], nn.ReLU):
 					#pdb.set_trace()
-					out 			= self.act_func(mem_thr, (t-1-self.spike[l]))
-					self.spike[l] 	= self.spike[l].masked_fill(out.bool(),t-1)
+					out 			= self.act_func(mem_thr)
+
+					if(self.cal_neuron):
+						if(t==0):
+							self.all_neuron_num_conv[l] =  out.size()[0]*out.size()[1]*out.size()[2]*out.size()[3]
+							self.mem_thr_tmp_conv[l] = out.sum().to('cpu').detach().numpy().copy()
+
+							
+						else:
+							self.mem_thr_tmp_conv[l] += out.sum().to('cpu').detach().numpy().copy()
+
+
+
+
+
+					# self.spike[l] 	= self.spike[l].masked_fill(out.bool(),t-1)
 					out_prev  		= out.clone()
+					# print(out_prev.sum())
+					# print(out_prev.size()[0]*out_prev.size()[1]*out_prev.size()[2]*out_prev.size()[3])
+					# print(out_prev.size())
 
 				elif isinstance(self.features[l], nn.AvgPool2d):
 					out_prev 		= self.features[l](out_prev)
@@ -418,22 +453,28 @@ class VGG_SNN_STDB(nn.Module):
 						if cur>max_mem:
 							max_mem = torch.tensor([cur])
 						break
-
-					#mem_thr 			= (self.mem[prev+l]/getattr(self.threshold, 't'+str(prev+l))) - 1.0
-					#rst 				= getattr(self.threshold,'t'+str(prev+l)) * (mem_thr>0).float()
-					#self.mem[prev+l] 	= getattr(self.leak, 'l'+str(prev+l)) * self.mem[prev+l] + self.classifier[l](out_prev) - rst
-					#delta_mem 			= self.custom_dropout(self.classifier[l](out_prev), prob=prob, conv=False)
 					delta_mem 			= self.classifier[l](out_prev)
 					self.mem[prev+l] 	= getattr(self.leak, 'l'+str(prev+l)) * self.mem[prev+l] + delta_mem
 					mem_thr 			= (self.mem[prev+l]/getattr(self.threshold, 't'+str(prev+l))) - 1.0
+	
 					rst 				= getattr(self.threshold,'t'+str(prev+l)) * (mem_thr>0).float()
 					self.mem[prev+l] 	= self.mem[prev+l]-rst
 
 				
 				elif isinstance(self.classifier[l], nn.ReLU):
-					out 				= self.act_func(mem_thr, (t-1-self.spike[prev+l]))
-					self.spike[prev+l] 	= self.spike[prev+l].masked_fill(out.bool(),t-1)
+					out 				= self.act_func(mem_thr)
+
+					if(self.cal_neuron):
+						if(t==0):
+							self.all_neuron_num_linear[l] =  out.size()[0]*out.size()[1]
+							self.mem_thr_tmp_linear[l] = out.sum().to('cpu').detach().numpy().copy()
+							
+						else:
+							self.mem_thr_tmp_linear[l] += out.sum().to('cpu').detach().numpy().copy()
+							
+					# self.spike[prev+l] 	= self.spike[prev+l].masked_fill(out.bool(),t-1)
 					out_prev  			= out.clone()
+			
 
 				elif isinstance(self.classifier[l], nn.Dropout):
 					out_prev 		= out_prev * self.mask[prev+l]
@@ -441,7 +482,53 @@ class VGG_SNN_STDB(nn.Module):
 			# Compute the classification layer outputs
 			if not find_max_mem:
 				self.mem[prev+l+1] 		= self.mem[prev+l+1] + self.classifier[l+1](out_prev)
+
 		if find_max_mem:
 			return max_mem
+		
+		if self.rank_reduce:
+			a = self.input_rank.shape[0]
+			b = self.input_rank.shape[1]
+			
+			for t in range(self.timesteps):
+				c = torch.tensor([torch.matrix_rank(self.input_rank[t,i,j,:,:]/self.timesteps).cuda().item() for i in range(a) for j in range(b)]).cuda()
+				c = c.view(a, -1).float()
+				if t == 0:
+					c_sum = c.sum(0)
+				else:
+					c_sum += c.sum(0)
+    				
+
+			return self.mem[prev+l+1],c_sum
+			# return self.mem[prev+l+1],self.input_rank
+    	
+		# print("\n")
+		# print(self.mem_thr_tmp)
+		# print("\n")
+		# print(self.all_neuron_num)
+		# print("\n")
+		# print("divide",self.mem_thr_tmp[19]/self.all_neuron_num[19])
+
+		# self.mem_thr_tmp = self.mem_thr_tmp.values
+		# self.all_neuron_num = self.all_neuron_num.values
+
+		# print(self.mem_thr_tmp/self.all_neuron_num)
+
+		if(self.cal_neuron):
+			self.mem_thr_tmp_conv =  list(self.mem_thr_tmp_conv.values())
+			self.all_neuron_num_conv = list(self.all_neuron_num_conv.values())			
+			self.mem_thr_tmp_linear =  list(self.mem_thr_tmp_linear.values())
+			self.all_neuron_num_linear = list(self.all_neuron_num_linear.values())
+
+			spike_rate_conv = np.array(self.mem_thr_tmp_conv)/np.array(self.all_neuron_num_conv)
+			spike_rate_linear = np.array(self.mem_thr_tmp_linear)/np.array(self.all_neuron_num_linear)
+
+			
+			# print(spike_rate)
+
+			return self.mem[prev+l+1],spike_rate_conv,spike_rate_linear
+
+		
+
 
 		return self.mem[prev+l+1]

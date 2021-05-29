@@ -1,10 +1,12 @@
 {
 	"folders": [
+
 		{
-			"path": "."
-		},
+			"path": "../../DNN_test/SSKD"
+		},		
+		
 		{
-			"path": "../../DNN_test/CIFAR-ZOO"
+			"path": "../../DNN_test/HRankPlus"
 		}
 	],
 	"settings": {}

@@ -7,7 +7,7 @@
 #python3 snn.py -a VGG16_STDB --optimizer Adam --dropout 0.3 --scaling_factor 0.3  --weight_decay 0.0  --lr_reduce 10  --store_name batch_type7 --lr_interval '0.3 0.42 0.70' --lr_reduce 10 --timesteps 5  --epochs 500 -lr 0.002 --default_threshold 1 --t_divide 5 --dataset cifar100
 #python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.3 --scaling_factor 0.3  --weight_decay 0.0  --lr_reduce 10  --store_name batch_type7 --lr_interval '0.3 0.42 0.70' --lr_reduce 10 --timesteps 5  --epochs 500 -lr 0.002 --default_threshold 1 --t_divide 5 
 
-#python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.3 --scaling_factor 0.3  --weight_decay 0.0  --lr_reduce 10  --store_name batch_type5 --lr_interval '0.3 0.42 0.70' --lr_reduce 10 --timesteps 5  --epochs 500 -lr 0.002 --default_threshold 1 --t_divide 5 --retrain True --pretrained_snn trained_models/snn_resnet20_batch_norm_cifar10_5_lr0.002_batch_type5_t_divide5.pth
+#python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.3 --scaling_factor 0.3  --weight_decay 0.0  --lr_reduce 10  --store_name batch_type5 --lr_interval '0.3 0.42 0.70' --lr_reduce 10 --timesteps 5  --epochs 500 -lr 0.002 --default_threshold 1 --t_divide 5 --retrain True --pretrained_snn trained_models/python3 snn.py -a RESNET20_BATCH_NORM --optimizer Adam --dropout 0.3 --scaling_factor 0.3  --weight_decay 0.0  --lr_reduce 10  --store_name batch_type6 --lr_interval '0.3 0.42 0.70' --lr_reduce 10 --timesteps 20  --epochs 500 -lr 0.0002 --default_threshold 1 --t_divide 5 --retrain True --pretrained_snn trained_models/snn_resnet20_batch_norm_cifar10_5_lr0.002_batch_type5_t_divide5.pth
 
 import torch
 import torch.nn as nn
